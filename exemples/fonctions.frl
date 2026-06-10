@@ -1,0 +1,50 @@
+# ────────────────────────────────────────
+#  Exemple 3 — Fonctions
+#  Commande : python main.py exemples/fonctions.frl
+# ────────────────────────────────────────
+
+# Fonction simple (sans retour)
+fonction saluer(prenom)
+    ecrire "Bonjour, " + prenom + " ! Bienvenue dans SharCode !"
+fin
+
+saluer("Alice")
+saluer("Bob")
+
+ecrire ""
+
+# Fonctions avec retour
+fonction additionner(a, b)
+    retourner a + b
+fin
+
+fonction multiplier(a, b)
+    retourner a * b
+fin
+
+ecrire "15 + 27 = " + additionner(15, 27)
+ecrire "6 x 7 = " + multiplier(6, 7)
+
+ecrire ""
+
+# Récursivité : factorielle
+fonction factorielle(n)
+    si n <= 1 alors
+        retourner 1
+    fin
+    retourner n * factorielle(n - 1)
+fin
+
+pour i de 1 a 10
+    ecrire texte(i) + "! = " + factorielle(i)
+fin
+
+ecrire ""
+
+# Fonctions natives
+ecrire "=== Fonctions natives ==="
+ecrire "taille de bonjour = " + taille("bonjour")
+ecrire "majuscules de sharkcode = " + majuscules("sharkcode")
+ecrire "arrondir pi a 2 dec = " + arrondir(3.14159, 2)
+ecrire "racine de 16 = " + racine(16)
+ecrire "2 puissance 10 = " + puissance(2, 10)

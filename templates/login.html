@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SharCode — Connexion</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+  <link rel="stylesheet" href="/static/css/auth.css">
+</head>
+<body class="auth-page">
+
+  <div class="auth-container">
+    <div class="auth-brand">
+      <span class="shark-icon">🦈</span>
+      <span class="brand-name">SharCode</span>
+    </div>
+    <h1 class="auth-title">Connexion</h1>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for category, message in messages %}
+        <div class="flash flash-{{ category }}">{{ message }}</div>
+      {% endfor %}
+    {% endwith %}
+
+    <form class="auth-form" method="POST" action="/login">
+      <div class="form-group">
+        <label for="email">Adresse email</label>
+        <input type="email" id="email" name="email" required placeholder="ton@email.fr" autocomplete="email">
+      </div>
+      <div class="form-group">
+        <label for="mot_de_passe">Mot de passe</label>
+        <input type="password" id="mot_de_passe" name="mot_de_passe" required placeholder="••••••••" autocomplete="current-password">
+      </div>
+      <button type="submit" class="btn-run btn-full">Se connecter</button>
+    </form>
+
+    <p class="auth-switch">
+      Pas encore de compte ?
+      <a href="/register">Créer un compte</a>
+    </p>
+  </div>
+
+</body>
+</html>

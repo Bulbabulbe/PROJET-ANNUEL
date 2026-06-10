@@ -1,0 +1,41 @@
+# ────────────────────────────────────────
+#  Exemple 2 — Boucles
+#  Commande : python main.py exemples/boucles.frl
+# ────────────────────────────────────────
+
+# Boucle pour : table de multiplication de 7
+ecrire "=== Table de multiplication de 7 ==="
+pour i de 1 a 10
+    ecrire "7 x " + i + " = " + 7 * i
+fin
+
+ecrire ""
+
+# Boucle tant que : compte à rebours
+ecrire "=== Compte a rebours ==="
+i vaut 10
+tant que i > 0
+    ecrire i
+    i vaut i - 1
+fin
+ecrire "DECOLLAGE !"
+
+ecrire ""
+
+# Somme des N premiers entiers
+n vaut 100
+somme vaut 0
+pour i de 1 a n
+    somme vaut somme + i
+fin
+ecrire "La somme de 1 a " + n + " est : " + somme
+
+ecrire ""
+
+# Nombres pairs de 1 à 20
+ecrire "=== Nombres pairs de 1 a 20 ==="
+pour i de 1 a 20
+    si i % 2 == 0 alors
+        ecrire i
+    fin
+fin

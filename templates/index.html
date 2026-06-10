@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SharCode — Apprendre à coder en français</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+  <link rel="stylesheet" href="/static/css/auth.css">
+</head>
+<body>
+
+  <!-- ── NAVBAR ──────────────────────────────────────────── -->
+  <header class="navbar">
+    <div class="navbar-brand">
+      <span class="shark-icon">🦈</span>
+      <span class="brand-name">SharCode</span>
+      <span class="brand-version">v1.0</span>
+    </div>
+    <nav class="navbar-links">
+      <button class="nav-btn active" onclick="showPanel('apprendre')">Apprendre</button>
+      <button class="nav-btn"        onclick="showPanel('reference')">Référence</button>
+      <button class="nav-btn"        onclick="showPanel('exemples')">Exemples</button>
+      {% if user and user.role == 'etudiant' %}
+        <a href="/etudiant/exercices" class="nav-btn">Exercices</a>
+      {% endif %}
+      {% if user and user.role == 'prof' %}
+        <a href="/prof/dashboard" class="nav-btn">Dashboard</a>
+      {% endif %}
+    </nav>
+    <div class="navbar-right">
+      {% if user %}
+        <span class="user-info">{{ user.prenom }}</span>
+        <button class="btn-secondary btn-small" onclick="ouvrirSauvegarder()" title="Sauvegarder mon programme">
+          Sauvegarder
+        </button>
+        <a href="/logout" class="nav-btn nav-btn-logout">Quitter</a>
+      {% else %}
+        <span class="tagline">Coder comme on parle</span>
+      {% endif %}
+    </div>
+  </header>
+
+  <!-- ── LAYOUT PRINCIPAL ────────────────────────────────── -->
+  <main class="layout">
+
+    <!-- ── SIDEBAR GAUCHE ──────────────────────────────── -->
+    <aside class="sidebar">
+
+      <!-- Panel : Apprendre -->
+      <div id="panel-apprendre" class="panel active">
+        <h2 class="panel-title">Apprendre</h2>
+        <p class="panel-subtitle">Clique sur une leçon pour commencer.</p>
+        <div class="lecons" id="lecons-list"></div>
+      </div>
+
+      <!-- Panel : Référence rapide -->
+      <div id="panel-reference" class="panel">
+        <h2 class="panel-title">Référence rapide</h2>
+        <div class="ref-section">
+          <h3>Variables</h3>
+          <code>nom vaut valeur</code>
+        </div>
+        <div class="ref-section">
+          <h3>Affichage / Saisie</h3>
+          <code>ecrire "texte"</code>
+          <code>x vaut lire "question"</code>
+        </div>
+        <div class="ref-section">
+          <h3>Opérateurs</h3>
+          <code>+  &nbsp;addition / concaténation</code>
+          <code>-  &nbsp;soustraction</code>
+          <code>*  &nbsp;multiplication</code>
+          <code>/  &nbsp;division</code>
+          <code>%  &nbsp;modulo (reste)</code>
+        </div>
+        <div class="ref-section">
+          <h3>Comparaisons</h3>
+          <code>==   égal à</code>
+          <code>!=   différent de</code>
+          <code>&lt;    inférieur à</code>
+          <code>&gt;    supérieur à</code>
+          <code>&lt;=   inférieur ou égal</code>
+          <code>&gt;=   supérieur ou égal</code>
+        </div>
+        <div class="ref-section">
+          <h3>Logique</h3>
+          <code>et  ou  non</code>
+        </div>
+        <div class="ref-section">
+          <h3>Condition</h3>
+          <code>si ... alors</code>
+          <code>  ...</code>
+          <code>sinon si ... alors</code>
+          <code>sinon</code>
+          <code>fin</code>
+        </div>
+        <div class="ref-section">
+          <h3>Boucles</h3>
+          <code>pour i de 1 a 10</code>
+          <code>  ...</code>
+          <code>fin</code>
+          <br>
+          <code>tant que condition</code>
+          <code>  ...</code>
+          <code>fin</code>
+        </div>
+        <div class="ref-section">
+          <h3>Fonctions</h3>
+          <code>fonction nom(a, b)</code>
+          <code>  retourner a plus b</code>
+          <code>fin</code>
+        </div>
+        <div class="ref-section">
+          <h3>Fonctions natives</h3>
+          <code>nombre(x)  texte(x)</code>
+          <code>taille(x)  arrondir(x, n)</code>
+          <code>absolu(x)  racine(x)</code>
+          <code>puissance(x, n)</code>
+          <code>majuscules(x)  minuscules(x)</code>
+          <code>minimum(a,b)  maximum(a,b)</code>
+        </div>
+        <div class="ref-section">
+          <h3>Valeurs spéciales</h3>
+          <code>vrai  faux  rien</code>
+        </div>
+      </div>
+
+      <!-- Panel : Exemples -->
+      <div id="panel-exemples" class="panel">
+        <h2 class="panel-title">Exemples</h2>
+        <p class="panel-subtitle">Clique pour charger dans l'éditeur.</p>
+        <div id="exemples-list"></div>
+      </div>
+
+    </aside>
+
+    <!-- ── ZONE EDITEUR ─────────────────────────────────── -->
+    <section class="editor-zone">
+
+      <!-- Barre d'outils -->
+      <div class="editor-toolbar">
+        <div class="toolbar-left">
+          <span class="filename">mon_programme.shc</span>
+        </div>
+        <div class="toolbar-right">
+          <button class="btn-secondary" onclick="clearEditor()">
+            Effacer
+          </button>
+          <button class="btn-run" onclick="lancerCode()" id="btn-run">
+            &#9654; Lancer
+          </button>
+        </div>
+      </div>
+
+      <!-- Éditeur de code -->
+      <div class="editor-wrapper">
+        <div class="line-numbers" id="line-numbers">1</div>
+        <textarea
+          id="editor"
+          class="editor"
+          spellcheck="false"
+          autocorrect="off"
+          autocapitalize="off"
+          placeholder="# Écris ton code SharCode ici...
+# Exemple :
+prenom vaut &quot;Alice&quot;
+ecrire &quot;Bonjour &quot; plus prenom"
+          oninput="updateLineNumbers()"
+          onscroll="syncScroll()"
+          onkeydown="handleTab(event)"
+        ></textarea>
+      </div>
+
+      <!-- Zone entrées -->
+      <div class="entrees-zone">
+        <label class="entrees-label">
+          Entrées du programme
+          <span class="entrees-hint">— si ton programme utilise <em>lire</em>, écris tes réponses ici, une par ligne</span>
+        </label>
+        <textarea id="entrees" class="entrees-input" rows="2"
+                  placeholder="Entree 1&#10;Entree 2"></textarea>
+      </div>
+
+      <!-- Console de sortie -->
+      <div class="console-zone">
+        <div class="console-header">
+          <span class="console-title">Console</span>
+          <button class="console-clear" onclick="clearConsole()">Effacer</button>
+        </div>
+        <div class="console-output" id="console-output">
+          <span class="console-welcome">SharCode 1.0 — Prêt. Écris ton code et clique sur Lancer.</span>
+        </div>
+      </div>
+
+    </section>
+  </main>
+
+  <!-- ── LECON MODALE ─────────────────────────────────────── -->
+  <div class="modal-overlay" id="modal-overlay" onclick="fermerLecon()"></div>
+  <div class="modal" id="modal-lecon">
+    <div class="modal-header">
+      <h2 id="modal-titre"></h2>
+      <button class="modal-close" onclick="fermerLecon()">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <div id="modal-contenu"></div>
+      <div class="modal-code-block">
+        <div class="modal-code-header">
+          <span>Exemple de code</span>
+          <button class="btn-charger" onclick="chargerExempleLecon()">
+            Charger dans l'éditeur
+          </button>
+        </div>
+        <pre id="modal-code"></pre>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" id="btn-prev-lecon" onclick="navLecon(-1)">← Précédent</button>
+      <span id="modal-progress"></span>
+      <button class="btn-run" id="btn-next-lecon" onclick="navLecon(1)">Suivant →</button>
+    </div>
+  </div>
+
+  <script src="/static/js/main.js"></script>
+
+  <!-- Modal sauvegarde programme -->
+  <div class="modal-overlay" id="modal-save-overlay" onclick="fermerSauvegarder()" style="display:none"></div>
+  <div class="modal" id="modal-save" style="display:none">
+    <div class="modal-header">
+      <h2>Sauvegarder le programme</h2>
+      <button class="modal-close" onclick="fermerSauvegarder()">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label for="save-nom">Nom du fichier</label>
+        <input type="text" id="save-nom" placeholder="mon_programme" class="soum-input">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="fermerSauvegarder()">Annuler</button>
+      <button class="btn-run" onclick="sauvegarderProgramme()">Sauvegarder</button>
+    </div>
+  </div>
+
+  <script>
+    function ouvrirSauvegarder() {
+      document.getElementById('modal-save').style.display = 'flex';
+      document.getElementById('modal-save-overlay').style.display = 'block';
+      document.getElementById('save-nom').focus();
+    }
+    function fermerSauvegarder() {
+      document.getElementById('modal-save').style.display = 'none';
+      document.getElementById('modal-save-overlay').style.display = 'none';
+    }
+    async function sauvegarderProgramme() {
+      const code = document.getElementById('editor').value.trim();
+      const nom  = document.getElementById('save-nom').value.trim() || 'mon_programme';
+      if (!code) { alert('Éditeur vide.'); return; }
+      const rep  = await fetch('/etudiant/sauvegarder', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ nom, code })
+      });
+      const data = await rep.json();
+      if (data.succes) {
+        fermerSauvegarder();
+        // petite notification dans la console
+        const out = document.getElementById('console-output');
+        const msg = document.createElement('span');
+        msg.style.color = '#80ffb0';
+        msg.textContent = '[Programme "' + nom + '" sauvegardé]\n';
+        out.appendChild(msg);
+      }
+    }
+  </script>
+
+</body>
+</html>

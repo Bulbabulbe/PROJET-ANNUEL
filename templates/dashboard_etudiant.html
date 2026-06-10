@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SharCode — Mes exercices</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+  <link rel="stylesheet" href="/static/css/auth.css">
+</head>
+<body class="dashboard-page">
+
+  <header class="navbar">
+    <div class="navbar-brand">
+      <span class="shark-icon">🦈</span>
+      <span class="brand-name">SharCode</span>
+    </div>
+    <nav class="navbar-links">
+      <a href="/" class="nav-btn">Éditeur</a>
+      <a href="/etudiant/exercices" class="nav-btn active">Exercices</a>
+    </nav>
+    <div class="navbar-right">
+      <span class="user-info">{{ user.prenom }} {{ user.nom }}</span>
+      <a href="/logout" class="nav-btn nav-btn-logout">Déconnexion</a>
+    </div>
+  </header>
+
+  <div class="dashboard-content">
+
+    <h1 class="dashboard-title">Exercices disponibles</h1>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for category, message in messages %}
+        <div class="flash flash-{{ category }}">{{ message }}</div>
+      {% endfor %}
+    {% endwith %}
+
+    {% if exercices %}
+      <div class="exercices-grid">
+        {% for exo in exercices %}
+          <div class="exo-card {% if exo.id in soumissions_ids %}exo-done{% endif %}">
+            <div class="exo-card-header">
+              <h3 class="exo-titre">{{ exo.titre }}</h3>
+              {% if exo.id in soumissions_ids %}
+                <span class="badge-done">Rendu</span>
+              {% endif %}
+            </div>
+            <p class="exo-description">{{ exo.description }}</p>
+            <p class="exo-meta">Par {{ exo.prof_prenom }} {{ exo.prof_nom }}</p>
+
+            {% if exo.code_exemple %}
+              <details class="exo-code-details">
+                <summary>Voir l'exemple de départ</summary>
+                <pre class="exo-code">{{ exo.code_exemple }}</pre>
+              </details>
+            {% endif %}
+
+            {% if exo.id not in soumissions_ids %}
+              <button class="btn-run btn-exo"
+                      onclick="ouvrirSoumission({{ exo.id }}, {{ exo.code_exemple | tojson }})">
+                Répondre dans l'éditeur
+              </button>
+            {% else %}
+              <button class="btn-secondary btn-exo" disabled>Déjà soumis</button>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="empty-state">
+        <p>Aucun exercice disponible pour l'instant.</p>
+        <a href="/" class="btn-run">Aller coder</a>
+      </div>
+    {% endif %}
+
+    {% if soumissions %}
+      <h2 class="section-title">Mes soumissions</h2>
+      <div class="soumissions-list">
+        {% for s in soumissions %}
+          <div class="soumission-item">
+            <span class="soum-titre">{{ s.exercice_titre }}</span>
+            <span class="soum-date">{{ s.date_soumission[:10] }}</span>
+            <details>
+              <summary>Voir mon code</summary>
+              <pre class="exo-code">{{ s.code }}</pre>
+            </details>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+  </div>
+
+  <!-- Modal soumission -->
+  <div class="modal-overlay" id="modal-soum-overlay" onclick="fermerModal()"></div>
+  <div class="modal" id="modal-soum" style="display:none">
+    <div class="modal-header">
+      <h2>Soumettre ma réponse</h2>
+      <button class="modal-close" onclick="fermerModal()">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <p class="modal-hint">Colle ou écris ton code ci-dessous, puis soumets.</p>
+      <textarea id="soum-code" class="soum-textarea" rows="12" spellcheck="false"></textarea>
+      <div class="form-group" style="margin-top:0.75rem">
+        <label for="soum-commentaire">Commentaire (facultatif)</label>
+        <input type="text" id="soum-commentaire" placeholder="Explique ta démarche..." class="soum-input">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="fermerModal()">Annuler</button>
+      <button class="btn-run" onclick="envoyerSoumission()">Soumettre</button>
+    </div>
+  </div>
+
+  <script>
+    let exoIdCourant = null;
+
+    function ouvrirSoumission(exoId, codeEx) {
+      exoIdCourant = exoId;
+      document.getElementById('soum-code').value = codeEx || '';
+      document.getElementById('soum-commentaire').value = '';
+      document.getElementById('modal-soum').style.display = 'flex';
+      document.getElementById('modal-soum-overlay').style.display = 'block';
+    }
+
+    function fermerModal() {
+      document.getElementById('modal-soum').style.display = 'none';
+      document.getElementById('modal-soum-overlay').style.display = 'none';
+    }
+
+    async function envoyerSoumission() {
+      const code = document.getElementById('soum-code').value.trim();
+      const commentaire = document.getElementById('soum-commentaire').value.trim();
+      if (!code) { alert('Écris ton code avant de soumettre.'); return; }
+
+      const rep = await fetch('/etudiant/soumettre', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ exercice_id: exoIdCourant, code, commentaire })
+      });
+      const data = await rep.json();
+      if (data.succes) {
+        fermerModal();
+        location.reload();
+      } else {
+        alert('Erreur lors de la soumission.');
+      }
+    }
+  </script>
+
+</body>
+</html>

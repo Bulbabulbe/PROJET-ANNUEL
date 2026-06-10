@@ -1,0 +1,29 @@
+# ────────────────────────────────────────
+#  Exemple 1 — Bonjour et conditions
+#  Commande : python main.py exemples/bonjour.frl
+# ────────────────────────────────────────
+
+ecrire "Bienvenue dans SharCode !"
+ecrire ""
+
+prenom vaut lire "Comment tu t'appelles ? "
+ecrire "Bonjour, " + prenom + " !"
+
+age vaut nombre(lire "Quel age as-tu ? ")
+
+ecrire ""
+
+si age < 0 alors
+    ecrire "Un age negatif, c'est impossible !"
+sinon si age < 13 alors
+    ecrire "Tu es encore enfant, profite bien !"
+sinon si age < 18 alors
+    ecrire "Tu es adolescent(e)."
+sinon si age < 65 alors
+    ecrire "Tu es adulte."
+sinon
+    ecrire "Bienvenue au club des sages !"
+fin
+
+ecrire ""
+ecrire "A bientot, " + prenom + " !"

@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SharCode — Soumissions</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+  <link rel="stylesheet" href="/static/css/auth.css">
+</head>
+<body class="dashboard-page">
+
+  <header class="navbar">
+    <div class="navbar-brand">
+      <span class="shark-icon">🦈</span>
+      <span class="brand-name">SharCode</span>
+      <span class="badge-prof">Prof</span>
+    </div>
+    <nav class="navbar-links">
+      <a href="/" class="nav-btn">Éditeur</a>
+      <a href="/prof/dashboard" class="nav-btn">Dashboard</a>
+    </nav>
+    <div class="navbar-right">
+      <span class="user-info">{{ user.prenom }} {{ user.nom }}</span>
+      <a href="/logout" class="nav-btn nav-btn-logout">Déconnexion</a>
+    </div>
+  </header>
+
+  <div class="dashboard-content">
+    <a href="/prof/dashboard" class="back-link">← Retour au dashboard</a>
+
+    <h1 class="dashboard-title">Soumissions — {{ exercice.titre }}</h1>
+    <p class="exo-description">{{ exercice.description }}</p>
+
+    {% if soumissions %}
+      <div class="soumissions-list">
+        {% for s in soumissions %}
+          <div class="soumission-card">
+            <div class="soum-header">
+              <span class="soum-eleve">{{ s.prenom }} {{ s.nom }}</span>
+              {% if s.classe %}<span class="soum-classe">{{ s.classe }}</span>{% endif %}
+              <span class="soum-date">{{ s.date_soumission[:16].replace('T', ' ') }}</span>
+              <a href="/prof/soumission/{{ s.id }}/telecharger"
+                 class="btn-secondary btn-small">
+                Télécharger .shc
+              </a>
+            </div>
+            {% if s.commentaire %}
+              <p class="soum-commentaire"><em>{{ s.commentaire }}</em></p>
+            {% endif %}
+            <details>
+              <summary>Voir le code</summary>
+              <pre class="exo-code">{{ s.code }}</pre>
+            </details>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="empty-state">
+        <p>Aucune soumission pour cet exercice.</p>
+      </div>
+    {% endif %}
+  </div>
+
+</body>
+</html>

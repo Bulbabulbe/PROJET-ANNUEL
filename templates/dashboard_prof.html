@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SharCode — Dashboard professeur</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+  <link rel="stylesheet" href="/static/css/auth.css">
+</head>
+<body class="dashboard-page">
+
+  <header class="navbar">
+    <div class="navbar-brand">
+      <span class="shark-icon">🦈</span>
+      <span class="brand-name">SharCode</span>
+      <span class="badge-prof">Prof</span>
+    </div>
+    <nav class="navbar-links">
+      <a href="/" class="nav-btn">Éditeur</a>
+      <a href="/prof/dashboard" class="nav-btn active">Dashboard</a>
+    </nav>
+    <div class="navbar-right">
+      <span class="user-info">{{ user.prenom }} {{ user.nom }}</span>
+      <a href="/logout" class="nav-btn nav-btn-logout">Déconnexion</a>
+    </div>
+  </header>
+
+  <div class="dashboard-content">
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for category, message in messages %}
+        <div class="flash flash-{{ category }}">{{ message }}</div>
+      {% endfor %}
+    {% endwith %}
+
+    <!-- Statistiques des élèves -->
+    <section class="dash-section">
+      <h2 class="section-title">Progression des élèves</h2>
+      {% if stats %}
+        <div class="stats-table-wrapper">
+          <table class="stats-table">
+            <thead>
+              <tr>
+                <th>Élève</th>
+                <th>Classe</th>
+                <th>Leçons complétées</th>
+                <th>Programmes</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for s in stats %}
+                <tr>
+                  <td>{{ s.prenom }} {{ s.nom }}</td>
+                  <td>{{ s.classe or '—' }}</td>
+                  <td>
+                    <div class="progress-bar-wrapper">
+                      <div class="progress-bar" style="width: {{ [s.nb_lecons * 100 // 6, 100] | min }}%"></div>
+                      <span>{{ s.nb_lecons }} / 6</span>
+                    </div>
+                  </td>
+                  <td>
+                    <a href="/prof/etudiant/{{ s.id }}/programmes" class="btn-secondary btn-small">
+                      Télécharger les programmes
+                    </a>
+                  </td>
+                  <td>
+                    <!-- détail lecons dans future version -->
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <p class="empty-text">Aucun élève inscrit pour l'instant.</p>
+      {% endif %}
+    </section>
+
+    <!-- Exercices -->
+    <section class="dash-section">
+      <h2 class="section-title">Mes exercices</h2>
+
+      <button class="btn-run" onclick="toggleFormExo()">+ Créer un exercice</button>
+
+      <div id="form-exo" class="form-exo hidden">
+        <form method="POST" action="/prof/exercice/creer">
+          <div class="form-group">
+            <label>Titre de l'exercice</label>
+            <input type="text" name="titre" required placeholder="ex. Calculatrice simple">
+          </div>
+          <div class="form-group">
+            <label>Description / Consigne</label>
+            <textarea name="description" rows="4" required placeholder="Ce que l'élève doit faire..."></textarea>
+          </div>
+          <div class="form-group">
+            <label>Code de départ (facultatif)</label>
+            <textarea name="code_exemple" rows="6" class="code-textarea" spellcheck="false"
+                      placeholder="# Code fourni aux élèves..."></textarea>
+          </div>
+          <div class="form-actions">
+            <button type="button" class="btn-secondary" onclick="toggleFormExo()">Annuler</button>
+            <button type="submit" class="btn-run">Créer</button>
+          </div>
+        </form>
+      </div>
+
+      {% if exercices %}
+        <div class="exercices-prof-list">
+          {% for exo in exercices %}
+            <div class="exo-prof-card">
+              <div class="exo-card-header">
+                <h3 class="exo-titre">{{ exo.titre }}</h3>
+                <span class="exo-date">{{ exo.date_creation[:10] }}</span>
+              </div>
+              <p class="exo-description">{{ exo.description }}</p>
+              <div class="exo-actions">
+                <a href="/prof/exercice/{{ exo.id }}/soumissions" class="btn-secondary btn-small">
+                  Voir les soumissions
+                </a>
+                <form method="POST" action="/prof/exercice/{{ exo.id }}/supprimer"
+                      onsubmit="return confirm('Supprimer cet exercice ?')">
+                  <button type="submit" class="btn-danger btn-small">Supprimer</button>
+                </form>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="empty-text">Tu n'as pas encore créé d'exercice.</p>
+      {% endif %}
+    </section>
+
+  </div>
+
+  <script>
+    function toggleFormExo() {
+      const f = document.getElementById('form-exo');
+      f.classList.toggle('hidden');
+    }
+  </script>
+
+</body>
+</html>

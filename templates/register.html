@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SharCode — Créer un compte</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+  <link rel="stylesheet" href="/static/css/auth.css">
+</head>
+<body class="auth-page">
+
+  <div class="auth-container auth-large">
+    <div class="auth-brand">
+      <span class="shark-icon">🦈</span>
+      <span class="brand-name">SharCode</span>
+    </div>
+    <h1 class="auth-title">Créer un compte</h1>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for category, message in messages %}
+        <div class="flash flash-{{ category }}">{{ message }}</div>
+      {% endfor %}
+    {% endwith %}
+
+    <form class="auth-form" method="POST" action="/register">
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="prenom">Prénom</label>
+          <input type="text" id="prenom" name="prenom" required placeholder="Alice">
+        </div>
+        <div class="form-group">
+          <label for="nom">Nom</label>
+          <input type="text" id="nom" name="nom" required placeholder="Dupont">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="email">Adresse email</label>
+        <input type="email" id="email" name="email" required placeholder="alice@email.fr" autocomplete="email">
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="mot_de_passe">Mot de passe</label>
+          <input type="password" id="mot_de_passe" name="mot_de_passe" required placeholder="••••••••" autocomplete="new-password">
+        </div>
+        <div class="form-group">
+          <label for="mot_de_passe2">Confirmer</label>
+          <input type="password" id="mot_de_passe2" name="mot_de_passe2" required placeholder="••••••••" autocomplete="new-password">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Rôle</label>
+        <div class="role-selector">
+          <label class="role-option" id="role-etudiant-label">
+            <input type="radio" name="role" value="etudiant" checked onchange="toggleProfFields()">
+            <span class="role-card">
+              <span class="role-icon">&#128218;</span>
+              <span class="role-label">Étudiant</span>
+            </span>
+          </label>
+          <label class="role-option" id="role-prof-label">
+            <input type="radio" name="role" value="prof" onchange="toggleProfFields()">
+            <span class="role-card">
+              <span class="role-icon">&#128203;</span>
+              <span class="role-label">Professeur</span>
+            </span>
+          </label>
+        </div>
+      </div>
+
+      <div class="form-group" id="champ-classe">
+        <label for="classe">Classe (ex. 4ème A)</label>
+        <input type="text" id="classe" name="classe" placeholder="4ème A">
+      </div>
+
+      <div class="form-group hidden" id="champ-code-prof">
+        <label for="code_prof">Code professeur</label>
+        <input type="text" id="code_prof" name="code_prof" placeholder="Code fourni par l'établissement">
+        <small class="form-hint">Demande ce code à ton administration.</small>
+      </div>
+
+      <button type="submit" class="btn-run btn-full">Créer mon compte</button>
+    </form>
+
+    <p class="auth-switch">
+      Déjà un compte ?
+      <a href="/login">Se connecter</a>
+    </p>
+  </div>
+
+  <script>
+    function toggleProfFields() {
+      const isProf = document.querySelector('input[name="role"]:checked').value === 'prof';
+      document.getElementById('champ-code-prof').classList.toggle('hidden', !isProf);
+      document.getElementById('champ-classe').classList.toggle('hidden', isProf);
+    }
+  </script>
+
+</body>
+</html>
