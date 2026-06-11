@@ -19,7 +19,7 @@ from frLang.erreurs      import ErreurFrLang
 import database as db
 
 app = Flask(__name__)
-app.secret_key = 'sharcode-secret-2024'
+app.secret_key = os.environ.get('SECRET_KEY', 'sharcode-dev-key-changez-moi-en-prod')
 
 # Initialise la base de données au démarrage
 db.init_db()
@@ -66,6 +66,8 @@ def login():
         u = db.verifier_login(email, mdp)
         if u:
             session['user_id'] = u['id']
+            if u['role'] == 'admin':
+                return redirect(url_for('admin_dashboard'))
             return redirect(url_for('index'))
         flash("Email ou mot de passe incorrect.", "erreur")
 
@@ -93,8 +95,18 @@ def register():
             flash("Les mots de passe ne correspondent pas.", "erreur")
         elif len(mdp) < 6:
             flash("Le mot de passe doit faire au moins 6 caractères.", "erreur")
-        elif role == 'prof' and code_prof != 'PROF2024':
-            flash("Code professeur incorrect.", "erreur")
+        elif role == 'prof':
+            ok_lic, msg_lic, licence_id = db.valider_licence_prof(code_prof)
+            if not ok_lic:
+                flash(msg_lic, "erreur")
+            else:
+                ok, err = db.creer_utilisateur(nom, prenom, email, mdp, role, classe,
+                                               licence_id=licence_id)
+                if ok:
+                    u = db.verifier_login(email, mdp)
+                    session['user_id'] = u['id']
+                    return redirect(url_for('index'))
+                flash(err, "erreur")
         else:
             ok, err = db.creer_utilisateur(nom, prenom, email, mdp, role, classe)
             if ok:
@@ -119,6 +131,8 @@ def index():
     u = utilisateur_connecte()
     if not u:
         return redirect(url_for('login'))
+    if u['role'] == 'admin':
+        return redirect(url_for('admin_dashboard'))
     return render_template('index.html', user=u)
 
 
@@ -327,7 +341,85 @@ def voir_programmes_etudiant(etudiant_id):
                      mimetype='application/zip')
 
 
+# ── Routes admin ──────────────────────────────────────────
+
+@app.route('/admin/dashboard')
+@login_requis(role='admin')
+def admin_dashboard():
+    u     = utilisateur_connecte()
+    stats = db.get_stats_admin()
+    return render_template('admin_dashboard.html', user=u, stats=stats)
+
+
+@app.route('/admin/licences')
+@login_requis(role='admin')
+def admin_licences():
+    u        = utilisateur_connecte()
+    licences = db.get_toutes_licences()
+    return render_template('admin_licences.html', user=u, licences=licences)
+
+
+@app.route('/admin/licence/creer', methods=['POST'])
+@login_requis(role='admin')
+def admin_creer_licence():
+    label      = request.form.get('label', '').strip()
+    max_profs  = int(request.form.get('max_profs', 5))
+    date_exp   = request.form.get('date_expiration', '').strip() or None
+    if not label:
+        flash("Le libellé est obligatoire.", "erreur")
+    else:
+        code = db.creer_licence(label, max_profs, date_exp)
+        flash(f"Licence créée : {code}", "succes")
+    return redirect(url_for('admin_licences'))
+
+
+@app.route('/admin/licence/<int:lic_id>/toggle', methods=['POST'])
+@login_requis(role='admin')
+def admin_toggle_licence(lic_id):
+    db.toggle_licence(lic_id)
+    flash("Statut de la licence modifié.", "succes")
+    return redirect(url_for('admin_licences'))
+
+
+@app.route('/admin/licence/<int:lic_id>/supprimer', methods=['POST'])
+@login_requis(role='admin')
+def admin_supprimer_licence(lic_id):
+    db.supprimer_licence(lic_id)
+    flash("Licence supprimée.", "succes")
+    return redirect(url_for('admin_licences'))
+
+
+@app.route('/admin/utilisateurs')
+@login_requis(role='admin')
+def admin_utilisateurs():
+    u     = utilisateur_connecte()
+    users = db.get_tous_utilisateurs()
+    return render_template('admin_utilisateurs.html', user=u, utilisateurs=users)
+
+
+@app.route('/admin/utilisateur/<int:user_id>/toggle', methods=['POST'])
+@login_requis(role='admin')
+def admin_toggle_utilisateur(user_id):
+    db.toggle_utilisateur(user_id)
+    flash("Statut de l'utilisateur modifié.", "succes")
+    return redirect(url_for('admin_utilisateurs'))
+
+
+@app.route('/admin/utilisateur/<int:user_id>/supprimer', methods=['POST'])
+@login_requis(role='admin')
+def admin_supprimer_utilisateur(user_id):
+    u = utilisateur_connecte()
+    if user_id == u['id']:
+        flash("Impossible de supprimer votre propre compte.", "erreur")
+    else:
+        db.supprimer_utilisateur_admin(user_id)
+        flash("Utilisateur supprimé.", "succes")
+    return redirect(url_for('admin_utilisateurs'))
+
+
 if __name__ == '__main__':
+    port  = int(os.environ.get('FLASK_PORT', 5000))
+    debug = os.environ.get('FLASK_ENV', 'production') == 'development'
     print('\n  [SharCode] Serveur lance !')
-    print('  Ouvre ton navigateur sur : http://localhost:5000\n')
-    app.run(debug=True, port=5000)
+    print(f'  Ouvre ton navigateur sur : http://localhost:{port}\n')
+    app.run(debug=debug, host='0.0.0.0', port=port)

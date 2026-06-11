@@ -1,0 +1,22 @@
+# Fichiers Python compilés
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Base de données locale (persiste dans le volume Docker)
+*.db
+*.sqlite3
+
+# Variables d'environnement locales
+.env
+
+# Git
+.git
+.gitignore
+
+# Éditeurs
+.vscode/
+.idea/
+*.swp
+*.swo

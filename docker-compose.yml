@@ -1,0 +1,50 @@
+version: '3.9'
+
+services:
+
+  web:
+    build: .
+    container_name: sharcode_web
+    # Pas de port exposé à l'hôte — accessible uniquement via nginx (réseau interne)
+    expose:
+      - "5000"
+    volumes:
+      - sharcode_data:/data
+    environment:
+      - SECRET_KEY=${SECRET_KEY:-sharcode-dev-key-changez-moi-en-prod}
+      - DATABASE_PATH=/data/sharcode.db
+      - FLASK_ENV=${FLASK_ENV:-production}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@sharcode.fr}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-Admin2024!}
+    networks:
+      - internal
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:5000/login')\""]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  nginx:
+    image: nginx:alpine
+    container_name: sharcode_nginx
+    ports:
+      - "${PORT:-80}:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./static:/app/static:ro
+    networks:
+      - internal
+    depends_on:
+      web:
+        condition: service_healthy
+    restart: unless-stopped
+
+networks:
+  internal:
+    driver: bridge
+
+volumes:
+  sharcode_data:
+    driver: local
