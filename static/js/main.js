@@ -539,6 +539,7 @@ function ouvrirProgramme(id, nom, code) {
   document.getElementById('editor').value = code || '';
   document.getElementById('filename').textContent = (nom || 'mon_programme') + '.shc';
   updateLineNumbers();
+  showPanel('apprendre');  // retour à l'éditeur
 }
 
 function nouveauProgramme() {
