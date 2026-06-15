@@ -65,13 +65,13 @@
             {% endif %}
 
             {% if not ma_soum %}
-              <button class="btn-run btn-exo"
-                      onclick="ouvrirSoumission({{ exo.id }}, {{ exo.code_exemple | tojson }})">
+              <button class="btn-run btn-exo" data-exo-id="{{ exo.id }}"
+                      data-code="{{ exo.code_exemple or '' }}" onclick="ouvrirSoumissionBtn(this)">
                 Répondre dans l'éditeur
               </button>
             {% else %}
-              <button class="btn-secondary btn-exo"
-                      onclick="ouvrirSoumission({{ exo.id }}, {{ ma_soum.code | tojson }})">
+              <button class="btn-secondary btn-exo" data-exo-id="{{ exo.id }}"
+                      data-code="{{ ma_soum.code or '' }}" onclick="ouvrirSoumissionBtn(this)">
                 Modifier ma réponse
               </button>
             {% endif %}
@@ -133,6 +133,12 @@
 
   <script>
     let exoIdCourant = null;
+
+    function ouvrirSoumissionBtn(btn) {
+      const exoId = btn.getAttribute('data-exo-id');
+      const code = btn.getAttribute('data-code');
+      ouvrirSoumission(parseInt(exoId), code);
+    }
 
     function ouvrirSoumission(exoId, codeEx) {
       exoIdCourant = exoId;
