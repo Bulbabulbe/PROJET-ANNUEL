@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SharCode — Administration</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+  <link rel="stylesheet" href="/static/css/auth.css">
+</head>
+<body class="dashboard-page">
+
+  <header class="navbar">
+    <div class="navbar-brand">
+      <span class="shark-icon">🦈</span>
+      <span class="brand-name">SharCode</span>
+      <span class="badge-admin">Admin</span>
+    </div>
+    <nav class="navbar-links">
+      <a href="/admin/dashboard" class="nav-btn active">Tableau de bord</a>
+      <a href="/admin/licences" class="nav-btn">Licences</a>
+      <a href="/admin/utilisateurs" class="nav-btn">Utilisateurs</a>
+    </nav>
+    <div class="navbar-right">
+      <span class="user-info">{{ user.prenom }} {{ user.nom }}</span>
+      <a href="/logout" class="nav-btn nav-btn-logout">Déconnexion</a>
+    </div>
+  </header>
+
+  <div class="dashboard-content">
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for category, message in messages %}
+        <div class="flash flash-{{ category }}">{{ message }}</div>
+      {% endfor %}
+    {% endwith %}
+
+    <h1 class="dashboard-title">Vue d'ensemble de la plateforme</h1>
+
+    <section class="dash-section">
+      <h2 class="section-title">Statistiques</h2>
+      <div class="stats-grid">
+        <div class="stat-card">
+          <span class="stat-number">{{ stats.nb_etudiants }}</span>
+          <span class="stat-label">Élèves actifs</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-number">{{ stats.nb_profs }}</span>
+          <span class="stat-label">Professeurs actifs</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-number">{{ stats.nb_licences }}</span>
+          <span class="stat-label">Licences actives</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-number">{{ stats.nb_exercices }}</span>
+          <span class="stat-label">Exercices créés</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-number">{{ stats.nb_soumissions }}</span>
+          <span class="stat-label">Soumissions</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-number">{{ stats.nb_programmes }}</span>
+          <span class="stat-label">Programmes sauvegardés</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="dash-section">
+      <h2 class="section-title">Gestion</h2>
+      <div class="table-actions">
+        <a href="/admin/licences" class="btn-run">Gérer les licences</a>
+        <a href="/admin/utilisateurs" class="btn-secondary">Gérer les utilisateurs</a>
+      </div>
+    </section>
+
+  </div>
+
+</body>
+</html>

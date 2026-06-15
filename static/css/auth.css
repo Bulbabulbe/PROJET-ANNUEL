@@ -603,3 +603,88 @@
 .back-link:hover {
   color: var(--shark-blue);
 }
+
+/* ── Admin ──────────────────────────────────────────────── */
+
+.badge-admin {
+  background: var(--warning);
+  color: #1a1b2e;
+  font-size: 0.7rem;
+  padding: 2px 7px;
+  border-radius: 99px;
+  font-weight: 700;
+}
+
+/* Cartes de statistiques (dashboard admin) */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 1rem;
+}
+
+.stat-card {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(0,119,182,0.25);
+  border-radius: var(--radius-lg);
+  padding: 1.3rem 1.1rem;
+  text-align: center;
+}
+
+.stat-number {
+  display: block;
+  color: var(--shark-light);
+  font-size: 2.1rem;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.stat-label {
+  display: block;
+  color: #8899bb;
+  font-size: 0.82rem;
+  margin-top: 0.4rem;
+}
+
+/* Pastilles de statut (licences / utilisateurs) */
+.status-pill {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 2px 9px;
+  border-radius: 99px;
+}
+
+.status-on {
+  background: rgba(16,185,129,0.18);
+  color: var(--success);
+}
+
+.status-off {
+  background: rgba(248,81,73,0.18);
+  color: var(--error);
+}
+
+.role-tag {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #8899bb;
+  text-transform: capitalize;
+}
+
+.licence-code {
+  font-family: var(--font-code);
+  font-size: 0.85rem;
+  color: var(--shark-light);
+}
+
+/* Boutons d'action alignés dans une cellule de tableau */
+.table-actions {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.inline-form {
+  display: inline;
+}

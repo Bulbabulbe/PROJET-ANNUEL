@@ -113,7 +113,7 @@ PROJET ANNUEL/
 ├── templates/               # Pages HTML (interface web)
 ├── static/                  # CSS, JavaScript, assets
 │
-└── exemples/                # Fichiers .frl d'exemple
+└── exemples/                # Fichiers .shc d'exemple
 
 ---
 

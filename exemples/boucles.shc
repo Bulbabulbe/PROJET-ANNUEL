@@ -1,6 +1,6 @@
 # ────────────────────────────────────────
 #  Exemple 2 — Boucles
-#  Commande : python main.py exemples/boucles.frl
+#  Commande : python main.py exemples/boucles.shc
 # ────────────────────────────────────────
 
 # Boucle pour : table de multiplication de 7

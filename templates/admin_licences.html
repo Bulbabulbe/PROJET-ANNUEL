@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SharCode — Licences</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+  <link rel="stylesheet" href="/static/css/auth.css">
+</head>
+<body class="dashboard-page">
+
+  <header class="navbar">
+    <div class="navbar-brand">
+      <span class="shark-icon">🦈</span>
+      <span class="brand-name">SharCode</span>
+      <span class="badge-admin">Admin</span>
+    </div>
+    <nav class="navbar-links">
+      <a href="/admin/dashboard" class="nav-btn">Tableau de bord</a>
+      <a href="/admin/licences" class="nav-btn active">Licences</a>
+      <a href="/admin/utilisateurs" class="nav-btn">Utilisateurs</a>
+    </nav>
+    <div class="navbar-right">
+      <span class="user-info">{{ user.prenom }} {{ user.nom }}</span>
+      <a href="/logout" class="nav-btn nav-btn-logout">Déconnexion</a>
+    </div>
+  </header>
+
+  <div class="dashboard-content">
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for category, message in messages %}
+        <div class="flash flash-{{ category }}">{{ message }}</div>
+      {% endfor %}
+    {% endwith %}
+
+    <h1 class="dashboard-title">Gestion des licences</h1>
+
+    <section class="dash-section">
+      <button class="btn-run" onclick="toggleFormLicence()">+ Créer une licence</button>
+
+      <div id="form-licence" class="form-exo hidden">
+        <form method="POST" action="/admin/licence/creer">
+          <div class="form-group">
+            <label>Libellé (établissement)</label>
+            <input type="text" name="label" required placeholder="ex. Collège Jean Moulin">
+          </div>
+          <div class="form-group">
+            <label>Nombre maximum de professeurs</label>
+            <input type="number" name="max_profs" value="5" min="1">
+          </div>
+          <div class="form-group">
+            <label>Date d'expiration (facultatif)</label>
+            <input type="date" name="date_expiration">
+          </div>
+          <div class="form-actions">
+            <button type="button" class="btn-secondary" onclick="toggleFormLicence()">Annuler</button>
+            <button type="submit" class="btn-run">Créer</button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <section class="dash-section">
+      <h2 class="section-title">Licences existantes</h2>
+      {% if licences %}
+        <div class="stats-table-wrapper">
+          <table class="stats-table">
+            <thead>
+              <tr>
+                <th>Code</th>
+                <th>Libellé</th>
+                <th>Profs</th>
+                <th>Expiration</th>
+                <th>Statut</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for lic in licences %}
+                <tr>
+                  <td><span class="licence-code">{{ lic.code }}</span></td>
+                  <td>{{ lic.label }}</td>
+                  <td>{{ lic.nb_profs_actifs }} / {{ lic.max_profs }}</td>
+                  <td>{{ lic.date_expiration or '—' }}</td>
+                  <td>
+                    {% if lic.active %}
+                      <span class="status-pill status-on">Active</span>
+                    {% else %}
+                      <span class="status-pill status-off">Désactivée</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    <div class="table-actions">
+                      <form class="inline-form" method="POST" action="/admin/licence/{{ lic.id }}/toggle">
+                        <button type="submit" class="btn-secondary btn-small">
+                          {{ 'Désactiver' if lic.active else 'Activer' }}
+                        </button>
+                      </form>
+                      <form class="inline-form" method="POST" action="/admin/licence/{{ lic.id }}/supprimer"
+                            onsubmit="return confirm('Supprimer cette licence ? Les profs liés seront détachés.')">
+                        <button type="submit" class="btn-danger btn-small">Supprimer</button>
+                      </form>
+                    </div>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <p class="empty-text">Aucune licence créée pour l'instant.</p>
+      {% endif %}
+    </section>
+
+  </div>
+
+  <script>
+    function toggleFormLicence() {
+      document.getElementById('form-licence').classList.toggle('hidden');
+    }
+  </script>
+
+</body>
+</html>

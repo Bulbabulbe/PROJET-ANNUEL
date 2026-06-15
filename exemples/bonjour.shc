@@ -1,6 +1,6 @@
 # ────────────────────────────────────────
 #  Exemple 1 — Bonjour et conditions
-#  Commande : python main.py exemples/bonjour.frl
+#  Commande : python main.py exemples/bonjour.shc
 # ────────────────────────────────────────
 
 ecrire "Bienvenue dans SharCode !"
