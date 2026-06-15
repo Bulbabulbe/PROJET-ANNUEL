@@ -99,10 +99,11 @@ Le requin (*shark*) apprend vite, il est efficace, il va droit au but. SharCode 
 ## Installation
 
 ### Prérequis
-- Python 3.9 ou supérieur (téléchargeable sur [python.org](https://python.org))
-- Aucune autre dépendance
+- **Python 3.9 ou supérieur** (téléchargeable sur [python.org](https://python.org))
+- Pour la **plateforme web** : `pip install -r requirements.txt` (Flask)
+- Pour le **déploiement conteneurisé** : [Docker Desktop](https://www.docker.com/products/docker-desktop/)
 
-### Lancer SharCode
+### 1. En ligne de commande (interpréteur)
 
 ```bash
 # Exécuter un programme SharCode
@@ -111,6 +112,60 @@ python main.py mon_programme.shc
 # Mode interactif (taper du code ligne par ligne)
 python main.py
 ```
+
+### 2. La plateforme web (en local)
+
+```bash
+pip install -r requirements.txt
+python app.py
+# Puis ouvre http://localhost:5000
+```
+
+### 3. Avec Docker (recommandé pour une mise en classe)
+
+```bash
+docker compose up --build
+# Puis ouvre http://localhost
+```
+
+> La création des comptes est expliquée dans la section **La plateforme web pour la classe** ci-dessous.
+
+---
+
+## La plateforme web pour la classe
+
+SharCode n'est pas qu'un interpréteur : c'est aussi une **plateforme web** pensée pour la salle de classe, organisée autour de trois rôles.
+
+### Les rôles
+
+| Rôle | Ce qu'il peut faire |
+|---|---|
+| **Administrateur** | Crée les écoles (licences) et les comptes professeurs ; gère tous les utilisateurs. |
+| **Professeur** | Crée les comptes de ses élèves, crée des exercices (avec date limite) et consulte les rendus. |
+| **Élève** | Code dans l'éditeur, sauvegarde et modifie ses programmes, rend les exercices. |
+
+### Création des comptes (en cascade)
+
+> Il n'y a **pas d'inscription libre** : chaque compte est créé par le niveau au-dessus.
+
+1. **L'administrateur** se connecte (compte par défaut : `admin@sharcode.fr` / `Admin2024!` — *à changer en production*).
+2. Il crée une **école** (licence) dans l'onglet *Licences*.
+3. Il crée les comptes **professeurs** dans l'onglet *Utilisateurs*, chacun rattaché à une école.
+4. Chaque **professeur** crée ensuite les comptes de **ses élèves** depuis son tableau de bord.
+
+Le nom de l'école s'affiche à côté de chaque élève, côté professeur.
+
+### Côté élève
+
+- **Éditeur** en français avec exécution immédiate et console de sortie.
+- **Mes fichiers** : sauvegarder, rouvrir et **modifier** ses programmes (utile pour corriger une erreur).
+- **Exercices** : rendre une réponse, la **corriger / re-soumettre**, et voir si le rendu est **à temps ou en retard**.
+
+### Côté professeur
+
+- Créer et gérer ses **élèves**.
+- Créer des **exercices** avec une **date limite** de rendu.
+- Consulter les **rendus**, voir leur statut **à temps / en retard**, et télécharger le code (`.shc` ou archive `.zip`).
 
 ---
 
@@ -438,11 +493,17 @@ ecrire "Bravo ! Trouvé en " plus essais plus " essai(s) !"
 
 ---
 
-## Roadmap — Ce qui vient ensuite
+## Roadmap
 
+### Déjà disponible
+- [x] **Éditeur web** — coder SharCode directement dans le navigateur
+- [x] **Espace classe** — comptes administrateur / professeur / élève
+- [x] **Exercices** — création par le prof, rendu par l'élève, statut à temps / en retard
+- [x] **Mes fichiers** — l'élève sauvegarde et modifie ses programmes
+
+### À venir
 - [ ] **Listes** — stocker plusieurs valeurs (`ma_liste vaut liste(1, 2, 3)`)
 - [ ] **Importer des fichiers** — découper un programme en plusieurs fichiers
-- [ ] **Éditeur web** — coder SharCode directement dans le navigateur
 - [ ] **Mode débogage** — exécuter pas à pas, voir les variables à chaque étape
 - [ ] **Coloration syntaxique** — extension VS Code
 - [ ] **Bibliothèque standard** — fonctions pour les fichiers, les dates, les maths avancées
