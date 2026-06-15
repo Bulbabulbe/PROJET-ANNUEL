@@ -98,6 +98,7 @@ def init_db():
     for migration in [
         "ALTER TABLE utilisateurs ADD COLUMN actif INTEGER DEFAULT 1",
         "ALTER TABLE utilisateurs ADD COLUMN licence_id INTEGER",
+        "ALTER TABLE exercices ADD COLUMN date_limite TEXT",
     ]:
         try:
             c.execute(migration)
@@ -177,6 +178,36 @@ def get_tous_etudiants():
     return [dict(r) for r in rows]
 
 
+def get_etudiants_licence(licence_id):
+    """Élèves rattachés à une école (licence) — vue côté professeur."""
+    conn = get_db()
+    rows = conn.execute("""
+        SELECT u.*, lic.label as ecole
+        FROM utilisateurs u
+        LEFT JOIN licences lic ON u.licence_id = lic.id
+        WHERE u.role = 'etudiant' AND u.licence_id = ?
+        ORDER BY u.classe, u.nom, u.prenom
+    """, (licence_id,)).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def supprimer_eleve(eleve_id, licence_id):
+    """Le prof supprime un élève de SON école uniquement (sécurité)."""
+    conn = get_db()
+    row = conn.execute(
+        "SELECT id FROM utilisateurs WHERE id = ? AND role = 'etudiant' AND licence_id = ?",
+        (eleve_id, licence_id)
+    ).fetchone()
+    if row:
+        conn.execute("DELETE FROM lecons_completees WHERE utilisateur_id = ?", (eleve_id,))
+        conn.execute("DELETE FROM programmes WHERE utilisateur_id = ?", (eleve_id,))
+        conn.execute("DELETE FROM soumissions WHERE etudiant_id = ?", (eleve_id,))
+        conn.execute("DELETE FROM utilisateurs WHERE id = ?", (eleve_id,))
+        conn.commit()
+    conn.close()
+
+
 # ── Leçons ────────────────────────────────────────────────
 
 def marquer_lecon(user_id, lecon_id, lecon_titre):
@@ -199,18 +230,26 @@ def get_lecons_etudiant(user_id):
     return [dict(r) for r in rows]
 
 
-def get_stats_lecons():
-    """Retourne pour chaque étudiant son nombre de leçons complétées."""
+def get_stats_lecons(licence_id=None):
+    """Retourne pour chaque étudiant son nombre de leçons complétées.
+    Si licence_id est fourni, ne renvoie que les élèves de cette école."""
     conn = get_db()
-    rows = conn.execute("""
+    params = []
+    filtre = ""
+    if licence_id is not None:
+        filtre = "AND u.licence_id = ?"
+        params.append(licence_id)
+    rows = conn.execute(f"""
         SELECT u.id, u.nom, u.prenom, u.classe,
+               lic.label as ecole,
                COUNT(l.id) as nb_lecons
         FROM utilisateurs u
         LEFT JOIN lecons_completees l ON u.id = l.utilisateur_id
-        WHERE u.role = 'etudiant'
+        LEFT JOIN licences lic ON u.licence_id = lic.id
+        WHERE u.role = 'etudiant' {filtre}
         GROUP BY u.id
         ORDER BY u.nom, u.prenom
-    """).fetchall()
+    """, params).fetchall()
     conn.close()
     return [dict(r) for r in rows]
 
@@ -219,9 +258,23 @@ def get_stats_lecons():
 
 def sauvegarder_programme(user_id, nom, code):
     conn = get_db()
-    conn.execute(
+    cursor = conn.execute(
         "INSERT INTO programmes (utilisateur_id, nom, code) VALUES (?, ?, ?)",
         (user_id, nom, code)
+    )
+    prog_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    return prog_id
+
+
+def modifier_programme(prog_id, user_id, nom, code):
+    """Met à jour un programme existant — uniquement s'il appartient à l'élève."""
+    conn = get_db()
+    conn.execute(
+        "UPDATE programmes SET nom = ?, code = ?, date_sauvegarde = datetime('now') "
+        "WHERE id = ? AND utilisateur_id = ?",
+        (nom, code, prog_id, user_id)
     )
     conn.commit()
     conn.close()
@@ -253,11 +306,12 @@ def supprimer_programme(prog_id, user_id):
 
 # ── Exercices ─────────────────────────────────────────────
 
-def creer_exercice(prof_id, titre, description, code_exemple=''):
+def creer_exercice(prof_id, titre, description, code_exemple='', date_limite=None):
     conn = get_db()
     cursor = conn.execute(
-        "INSERT INTO exercices (prof_id, titre, description, code_exemple) VALUES (?, ?, ?, ?)",
-        (prof_id, titre, description, code_exemple)
+        "INSERT INTO exercices (prof_id, titre, description, code_exemple, date_limite) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (prof_id, titre, description, code_exemple, date_limite or None)
     )
     exo_id = cursor.lastrowid
     conn.commit()
@@ -304,39 +358,75 @@ def supprimer_exercice(exo_id, prof_id):
 # ── Soumissions ───────────────────────────────────────────
 
 def soumettre_exercice(exercice_id, etudiant_id, code, commentaire=''):
+    """Enregistre la soumission. Si l'élève a déjà rendu, met à jour sa réponse
+    (il peut corriger une erreur) et réinitialise la date de soumission."""
     conn = get_db()
-    conn.execute(
-        "INSERT INTO soumissions (exercice_id, etudiant_id, code, commentaire) VALUES (?, ?, ?, ?)",
-        (exercice_id, etudiant_id, code, commentaire)
-    )
+    existante = conn.execute(
+        "SELECT id FROM soumissions WHERE exercice_id = ? AND etudiant_id = ?",
+        (exercice_id, etudiant_id)
+    ).fetchone()
+    if existante:
+        conn.execute(
+            "UPDATE soumissions SET code = ?, commentaire = ?, "
+            "date_soumission = datetime('now') WHERE id = ?",
+            (code, commentaire, existante['id'])
+        )
+    else:
+        conn.execute(
+            "INSERT INTO soumissions (exercice_id, etudiant_id, code, commentaire) "
+            "VALUES (?, ?, ?, ?)",
+            (exercice_id, etudiant_id, code, commentaire)
+        )
     conn.commit()
     conn.close()
+
+
+def _est_en_retard(date_soumission, date_limite):
+    """Vrai si la soumission a été faite après la date limite.
+    Le jour de la date limite compte comme « à temps »."""
+    if not date_limite or not date_soumission:
+        return False
+    return date_soumission[:10] > date_limite[:10]
 
 
 def get_soumissions_exercice(exercice_id):
     conn = get_db()
     rows = conn.execute("""
-        SELECT s.*, u.nom, u.prenom, u.classe
+        SELECT s.*, u.nom, u.prenom, u.classe,
+               lic.label as ecole,
+               e.date_limite
         FROM soumissions s
         JOIN utilisateurs u ON s.etudiant_id = u.id
+        JOIN exercices e ON s.exercice_id = e.id
+        LEFT JOIN licences lic ON u.licence_id = lic.id
         WHERE s.exercice_id = ?
         ORDER BY s.date_soumission DESC
     """, (exercice_id,)).fetchall()
     conn.close()
-    return [dict(r) for r in rows]
+    result = []
+    for r in rows:
+        d = dict(r)
+        d['en_retard'] = _est_en_retard(d['date_soumission'], d.get('date_limite'))
+        result.append(d)
+    return result
 
 
 def get_soumissions_etudiant(etudiant_id):
     conn = get_db()
     rows = conn.execute("""
-        SELECT s.*, e.titre as exercice_titre
+        SELECT s.*, e.titre as exercice_titre, e.date_limite
         FROM soumissions s
         JOIN exercices e ON s.exercice_id = e.id
         WHERE s.etudiant_id = ?
         ORDER BY s.date_soumission DESC
     """, (etudiant_id,)).fetchall()
     conn.close()
-    return [dict(r) for r in rows]
+    result = []
+    for r in rows:
+        d = dict(r)
+        d['en_retard'] = _est_en_retard(d['date_soumission'], d.get('date_limite'))
+        result.append(d)
+    return result
 
 
 # ── Licences ──────────────────────────────────────────────

@@ -74,48 +74,12 @@ def login():
     return render_template('login.html')
 
 
-@app.route('/register', methods=['GET', 'POST'])
+@app.route('/register')
 def register():
-    if utilisateur_connecte():
-        return redirect(url_for('index'))
-
-    if request.method == 'POST':
-        nom    = request.form.get('nom', '').strip()
-        prenom = request.form.get('prenom', '').strip()
-        email  = request.form.get('email', '').strip().lower()
-        mdp    = request.form.get('mot_de_passe', '')
-        mdp2   = request.form.get('mot_de_passe2', '')
-        role   = request.form.get('role', 'etudiant')
-        classe = request.form.get('classe', '').strip()
-        code_prof = request.form.get('code_prof', '').strip()
-
-        if not all([nom, prenom, email, mdp]):
-            flash("Tous les champs sont obligatoires.", "erreur")
-        elif mdp != mdp2:
-            flash("Les mots de passe ne correspondent pas.", "erreur")
-        elif len(mdp) < 6:
-            flash("Le mot de passe doit faire au moins 6 caractères.", "erreur")
-        elif role == 'prof':
-            ok_lic, msg_lic, licence_id = db.valider_licence_prof(code_prof)
-            if not ok_lic:
-                flash(msg_lic, "erreur")
-            else:
-                ok, err = db.creer_utilisateur(nom, prenom, email, mdp, role, classe,
-                                               licence_id=licence_id)
-                if ok:
-                    u = db.verifier_login(email, mdp)
-                    session['user_id'] = u['id']
-                    return redirect(url_for('index'))
-                flash(err, "erreur")
-        else:
-            ok, err = db.creer_utilisateur(nom, prenom, email, mdp, role, classe)
-            if ok:
-                u = db.verifier_login(email, mdp)
-                session['user_id'] = u['id']
-                return redirect(url_for('index'))
-            flash(err, "erreur")
-
-    return render_template('register.html')
+    # L'inscription publique est désactivée : les comptes professeurs sont créés
+    # par l'administrateur, et les comptes élèves par leur professeur.
+    flash("Les comptes sont créés par ton établissement. Demande tes identifiants à ton professeur ou à l'administration.", "info")
+    return redirect(url_for('login'))
 
 
 @app.route('/logout')
@@ -191,7 +155,20 @@ def sauvegarder_programme():
     code = data.get('code', '').strip()
     if not code:
         return jsonify({'succes': False, 'erreur': 'Code vide.'})
-    db.sauvegarder_programme(u['id'], nom, code)
+    prog_id = db.sauvegarder_programme(u['id'], nom, code)
+    return jsonify({'succes': True, 'id': prog_id})
+
+
+@app.route('/etudiant/programme/<int:prog_id>/modifier', methods=['POST'])
+@login_requis()
+def modifier_mon_programme(prog_id):
+    u    = utilisateur_connecte()
+    data = request.get_json()
+    nom  = (data.get('nom') or 'mon_programme').strip() or 'mon_programme'
+    code = data.get('code', '').strip()
+    if not code:
+        return jsonify({'succes': False, 'erreur': 'Code vide.'})
+    db.modifier_programme(prog_id, u['id'], nom, code)
     return jsonify({'succes': True})
 
 
@@ -227,9 +204,10 @@ def exercices_etudiant():
     exos = db.get_tous_exercices()
     soum = db.get_soumissions_etudiant(u['id'])
     soum_ids = {s['exercice_id'] for s in soum}
+    soum_par_exo = {s['exercice_id']: s for s in soum}
     return render_template('dashboard_etudiant.html', user=u,
                            exercices=exos, soumissions_ids=soum_ids,
-                           soumissions=soum)
+                           soumissions=soum, soumissions_par_exo=soum_par_exo)
 
 
 @app.route('/etudiant/soumettre', methods=['POST'])
@@ -251,10 +229,47 @@ def soumettre():
 @app.route('/prof/dashboard')
 @login_requis(role='prof')
 def dashboard_prof():
-    u     = utilisateur_connecte()
-    stats = db.get_stats_lecons()
-    exos  = db.get_exercices_prof(u['id'])
-    return render_template('dashboard_prof.html', user=u, stats=stats, exercices=exos)
+    u      = utilisateur_connecte()
+    stats  = db.get_stats_lecons(u.get('licence_id'))
+    exos   = db.get_exercices_prof(u['id'])
+    eleves = db.get_etudiants_licence(u['licence_id']) if u.get('licence_id') else []
+    lic    = db.get_licence(u['licence_id']) if u.get('licence_id') else None
+    ecole  = lic['label'] if lic else None
+    return render_template('dashboard_prof.html', user=u, stats=stats,
+                           exercices=exos, eleves=eleves, ecole=ecole)
+
+
+@app.route('/prof/eleve/creer', methods=['POST'])
+@login_requis(role='prof')
+def creer_eleve():
+    u = utilisateur_connecte()
+    if not u.get('licence_id'):
+        flash("Ton compte n'est rattaché à aucune école. Contacte l'administrateur.", "erreur")
+        return redirect(url_for('dashboard_prof'))
+    nom    = request.form.get('nom', '').strip()
+    prenom = request.form.get('prenom', '').strip()
+    email  = request.form.get('email', '').strip().lower()
+    mdp    = request.form.get('mot_de_passe', '')
+    classe = request.form.get('classe', '').strip()
+    if not all([nom, prenom, email, mdp]):
+        flash("Nom, prénom, email et mot de passe sont obligatoires.", "erreur")
+    elif len(mdp) < 6:
+        flash("Le mot de passe doit faire au moins 6 caractères.", "erreur")
+    else:
+        ok, err = db.creer_utilisateur(nom, prenom, email, mdp, role='etudiant',
+                                       classe=classe, licence_id=u['licence_id'])
+        flash("Élève créé." if ok else err, "succes" if ok else "erreur")
+    return redirect(url_for('dashboard_prof'))
+
+
+@app.route('/prof/eleve/<int:eleve_id>/supprimer', methods=['POST'])
+@login_requis(role='prof')
+def supprimer_eleve(eleve_id):
+    u = utilisateur_connecte()
+    if u.get('licence_id'):
+        db.supprimer_eleve(eleve_id, u['licence_id'])
+        flash("Élève supprimé.", "succes")
+    return redirect(url_for('dashboard_prof'))
 
 
 @app.route('/prof/exercice/creer', methods=['POST'])
@@ -265,8 +280,9 @@ def creer_exercice():
     titre       = data.get('titre', '').strip()
     description = data.get('description', '').strip()
     code_ex     = data.get('code_exemple', '').strip()
+    date_limite = data.get('date_limite', '').strip() or None
     if titre and description:
-        db.creer_exercice(u['id'], titre, description, code_ex)
+        db.creer_exercice(u['id'], titre, description, code_ex, date_limite)
         flash("Exercice créé.", "succes")
     else:
         flash("Titre et description obligatoires.", "erreur")
@@ -392,9 +408,33 @@ def admin_supprimer_licence(lic_id):
 @app.route('/admin/utilisateurs')
 @login_requis(role='admin')
 def admin_utilisateurs():
-    u     = utilisateur_connecte()
-    users = db.get_tous_utilisateurs()
-    return render_template('admin_utilisateurs.html', user=u, utilisateurs=users)
+    u        = utilisateur_connecte()
+    users    = db.get_tous_utilisateurs()
+    licences = db.get_toutes_licences()
+    return render_template('admin_utilisateurs.html', user=u,
+                           utilisateurs=users, licences=licences)
+
+
+@app.route('/admin/utilisateur/creer', methods=['POST'])
+@login_requis(role='admin')
+def admin_creer_utilisateur():
+    """L'admin crée un compte professeur rattaché à une licence (école)."""
+    nom        = request.form.get('nom', '').strip()
+    prenom     = request.form.get('prenom', '').strip()
+    email      = request.form.get('email', '').strip().lower()
+    mdp        = request.form.get('mot_de_passe', '')
+    licence_id = request.form.get('licence_id', '').strip()
+    if not all([nom, prenom, email, mdp, licence_id]):
+        flash("Tous les champs (dont l'école) sont obligatoires.", "erreur")
+    elif len(mdp) < 6:
+        flash("Le mot de passe doit faire au moins 6 caractères.", "erreur")
+    elif not db.get_licence(licence_id):
+        flash("École (licence) introuvable.", "erreur")
+    else:
+        ok, err = db.creer_utilisateur(nom, prenom, email, mdp, role='prof',
+                                       licence_id=int(licence_id))
+        flash("Professeur créé." if ok else err, "succes" if ok else "erreur")
+    return redirect(url_for('admin_utilisateurs'))
 
 
 @app.route('/admin/utilisateur/<int:user_id>/toggle', methods=['POST'])

@@ -36,9 +36,16 @@
         {% for s in soumissions %}
           <div class="soumission-card">
             <div class="soum-header">
-              <span class="soum-eleve">{{ s.prenom }} {{ s.nom }}</span>
+              <span class="soum-eleve">{{ s.prenom }} {{ s.nom }}{% if s.ecole %} ({{ s.ecole }}){% endif %}</span>
               {% if s.classe %}<span class="soum-classe">{{ s.classe }}</span>{% endif %}
               <span class="soum-date">{{ s.date_soumission[:16].replace('T', ' ') }}</span>
+              {% if s.date_limite %}
+                {% if s.en_retard %}
+                  <span class="status-pill status-off">En retard</span>
+                {% else %}
+                  <span class="status-pill status-on">À temps</span>
+                {% endif %}
+              {% endif %}
               <a href="/prof/soumission/{{ s.id }}/telecharger"
                  class="btn-secondary btn-small">
                 Télécharger .shc

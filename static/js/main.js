@@ -280,6 +280,7 @@ fin`
 
 // ── Initialisation ────────────────────────────────────────────
 let leconActive = 0;
+let programmeCourantId = null;   // fichier élève actuellement ouvert (null = nouveau)
 
 document.addEventListener('DOMContentLoaded', () => {
   construireLecons();
@@ -321,14 +322,10 @@ function construireExemples() {
 function showPanel(nom) {
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-  document.getElementById('panel-' + nom).classList.add('active');
-  // Activer le bon bouton nav
-  document.querySelectorAll('.nav-btn').forEach(btn => {
-    if (btn.textContent.toLowerCase().includes(
-      nom === 'apprendre' ? 'apprendre' :
-      nom === 'reference' ? 'réf' : 'exemples'
-    )) btn.classList.add('active');
-  });
+  const panel = document.getElementById('panel-' + nom);
+  if (panel) panel.classList.add('active');
+  const btn = document.querySelector('.nav-btn[data-panel="' + nom + '"]');
+  if (btn) btn.classList.add('active');
 }
 
 
@@ -372,6 +369,9 @@ function chargerExempleLecon() {
   const l = LECONS[leconActive];
   document.getElementById('editor').value = l.code;
   if (l.entrees) document.getElementById('entrees').value = l.entrees;
+  programmeCourantId = null;
+  const fn = document.getElementById('filename');
+  if (fn) fn.textContent = 'mon_programme.shc';
   updateLineNumbers();
   fermerLecon();
 }
@@ -379,6 +379,9 @@ function chargerExempleLecon() {
 function chargerExemple(ex) {
   document.getElementById('editor').value = ex.code;
   document.getElementById('entrees').value = ex.entrees || '';
+  programmeCourantId = null;
+  const fn = document.getElementById('filename');
+  if (fn) fn.textContent = 'mon_programme.shc';
   updateLineNumbers();
   showPanel('apprendre');
 }
@@ -477,3 +480,78 @@ document.addEventListener('keydown', e => {
     lancerCode();
   }
 });
+
+
+// ── Mes fichiers (programmes sauvegardés de l'élève) ──────────
+function escapeHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
+}
+
+async function chargerMesProgrammes() {
+  const container = document.getElementById('programmes-list');
+  if (!container) return;
+  container.innerHTML = '<p class="panel-subtitle">Chargement...</p>';
+  try {
+    const rep  = await fetch('/etudiant/programmes');
+    const data = await rep.json();
+    const progs = data.programmes || [];
+    if (progs.length === 0) {
+      container.innerHTML = '<p class="panel-subtitle">Aucun fichier sauvegardé pour l\'instant.</p>';
+      return;
+    }
+    container.innerHTML = '';
+    progs.forEach(p => {
+      const card = document.createElement('div');
+      card.className = 'exemple-card';
+      const date = (p.date_sauvegarde || '').substring(0, 16).replace('T', ' ');
+      card.innerHTML =
+        '<div class="exemple-card-titre">' + escapeHtml(p.nom) + '</div>' +
+        '<div class="exemple-card-desc">' + escapeHtml(date) + '</div>';
+
+      const actions = document.createElement('div');
+      actions.className = 'table-actions';
+      actions.style.marginTop = '0.5rem';
+
+      const bOpen = document.createElement('button');
+      bOpen.className = 'btn-secondary btn-small';
+      bOpen.textContent = 'Ouvrir';
+      bOpen.onclick = () => ouvrirProgramme(p.id, p.nom, p.code);
+
+      const bDel = document.createElement('button');
+      bDel.className = 'btn-danger btn-small';
+      bDel.textContent = 'Supprimer';
+      bDel.onclick = () => supprimerMonProgramme(p.id, p.nom);
+
+      actions.appendChild(bOpen);
+      actions.appendChild(bDel);
+      card.appendChild(actions);
+      container.appendChild(card);
+    });
+  } catch (e) {
+    container.innerHTML = '<p class="panel-subtitle">Erreur de chargement.</p>';
+  }
+}
+
+function ouvrirProgramme(id, nom, code) {
+  programmeCourantId = id;
+  document.getElementById('editor').value = code || '';
+  document.getElementById('filename').textContent = (nom || 'mon_programme') + '.shc';
+  updateLineNumbers();
+}
+
+function nouveauProgramme() {
+  programmeCourantId = null;
+  document.getElementById('editor').value = '';
+  document.getElementById('entrees').value = '';
+  document.getElementById('filename').textContent = 'mon_programme.shc';
+  updateLineNumbers();
+}
+
+async function supprimerMonProgramme(id, nom) {
+  if (!confirm('Supprimer le fichier "' + nom + '" ?')) return;
+  await fetch('/etudiant/programme/' + id + '/supprimer', { method: 'POST' });
+  if (programmeCourantId === id) nouveauProgramme();
+  chargerMesProgrammes();
+}

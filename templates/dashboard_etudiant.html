@@ -37,15 +37,25 @@
     {% if exercices %}
       <div class="exercices-grid">
         {% for exo in exercices %}
-          <div class="exo-card {% if exo.id in soumissions_ids %}exo-done{% endif %}">
+          {% set ma_soum = soumissions_par_exo.get(exo.id) %}
+          <div class="exo-card {% if ma_soum %}exo-done{% endif %}">
             <div class="exo-card-header">
               <h3 class="exo-titre">{{ exo.titre }}</h3>
-              {% if exo.id in soumissions_ids %}
-                <span class="badge-done">Rendu</span>
+              {% if ma_soum %}
+                {% if exo.date_limite and ma_soum.en_retard %}
+                  <span class="status-pill status-off">Rendu en retard</span>
+                {% elif exo.date_limite %}
+                  <span class="status-pill status-on">Rendu à temps</span>
+                {% else %}
+                  <span class="badge-done">Rendu</span>
+                {% endif %}
               {% endif %}
             </div>
             <p class="exo-description">{{ exo.description }}</p>
             <p class="exo-meta">Par {{ exo.prof_prenom }} {{ exo.prof_nom }}</p>
+            {% if exo.date_limite %}
+              <p class="exo-meta">📅 À rendre avant le {{ exo.date_limite }}</p>
+            {% endif %}
 
             {% if exo.code_exemple %}
               <details class="exo-code-details">
@@ -54,13 +64,16 @@
               </details>
             {% endif %}
 
-            {% if exo.id not in soumissions_ids %}
+            {% if not ma_soum %}
               <button class="btn-run btn-exo"
                       onclick="ouvrirSoumission({{ exo.id }}, {{ exo.code_exemple | tojson }})">
                 Répondre dans l'éditeur
               </button>
             {% else %}
-              <button class="btn-secondary btn-exo" disabled>Déjà soumis</button>
+              <button class="btn-secondary btn-exo"
+                      onclick="ouvrirSoumission({{ exo.id }}, {{ ma_soum.code | tojson }})">
+                Modifier ma réponse
+              </button>
             {% endif %}
           </div>
         {% endfor %}
@@ -79,6 +92,13 @@
           <div class="soumission-item">
             <span class="soum-titre">{{ s.exercice_titre }}</span>
             <span class="soum-date">{{ s.date_soumission[:10] }}</span>
+            {% if s.date_limite %}
+              {% if s.en_retard %}
+                <span class="status-pill status-off">En retard</span>
+              {% else %}
+                <span class="status-pill status-on">À temps</span>
+              {% endif %}
+            {% endif %}
             <details>
               <summary>Voir mon code</summary>
               <pre class="exo-code">{{ s.code }}</pre>

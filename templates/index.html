@@ -17,9 +17,12 @@
       <span class="brand-version">v1.0</span>
     </div>
     <nav class="navbar-links">
-      <button class="nav-btn active" onclick="showPanel('apprendre')">Apprendre</button>
-      <button class="nav-btn"        onclick="showPanel('reference')">Référence</button>
-      <button class="nav-btn"        onclick="showPanel('exemples')">Exemples</button>
+      <button class="nav-btn active" data-panel="apprendre" onclick="showPanel('apprendre')">Apprendre</button>
+      <button class="nav-btn" data-panel="reference" onclick="showPanel('reference')">Référence</button>
+      <button class="nav-btn" data-panel="exemples" onclick="showPanel('exemples')">Exemples</button>
+      {% if user %}
+        <button class="nav-btn" data-panel="fichiers" onclick="showPanel('fichiers'); chargerMesProgrammes()">Mes fichiers</button>
+      {% endif %}
       {% if user and user.role == 'etudiant' %}
         <a href="/etudiant/exercices" class="nav-btn">Exercices</a>
       {% endif %}
@@ -132,6 +135,14 @@
         <div id="exemples-list"></div>
       </div>
 
+      <!-- Panel : Mes fichiers -->
+      <div id="panel-fichiers" class="panel">
+        <h2 class="panel-title">Mes fichiers</h2>
+        <p class="panel-subtitle">Tes programmes sauvegardés — clique sur « Ouvrir » pour les revoir et les modifier.</p>
+        <button class="btn-secondary btn-small" onclick="nouveauProgramme()" style="margin-bottom:0.75rem">+ Nouveau fichier</button>
+        <div id="programmes-list"></div>
+      </div>
+
     </aside>
 
     <!-- ── ZONE EDITEUR ─────────────────────────────────── -->
@@ -140,7 +151,7 @@
       <!-- Barre d'outils -->
       <div class="editor-toolbar">
         <div class="toolbar-left">
-          <span class="filename">mon_programme.shc</span>
+          <span class="filename" id="filename">mon_programme.shc</span>
         </div>
         <div class="toolbar-right">
           <button class="btn-secondary" onclick="clearEditor()">
@@ -244,6 +255,9 @@ ecrire &quot;Bonjour &quot; plus prenom"
 
   <script>
     function ouvrirSauvegarder() {
+      const actuel = document.getElementById('filename').textContent.replace(/\.shc$/, '');
+      document.getElementById('save-nom').value =
+        (actuel && actuel !== 'mon_programme') ? actuel : '';
       document.getElementById('modal-save').style.display = 'flex';
       document.getElementById('modal-save-overlay').style.display = 'block';
       document.getElementById('save-nom').focus();
@@ -256,20 +270,34 @@ ecrire &quot;Bonjour &quot; plus prenom"
       const code = document.getElementById('editor').value.trim();
       const nom  = document.getElementById('save-nom').value.trim() || 'mon_programme';
       if (!code) { alert('Éditeur vide.'); return; }
-      const rep  = await fetch('/etudiant/sauvegarder', {
+
+      // Si un fichier est ouvert, on le met à jour ; sinon on en crée un nouveau.
+      const miseAJour = !!programmeCourantId;
+      const url = miseAJour
+        ? '/etudiant/programme/' + programmeCourantId + '/modifier'
+        : '/etudiant/sauvegarder';
+
+      const rep  = await fetch(url, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({ nom, code })
       });
       const data = await rep.json();
       if (data.succes) {
+        if (!miseAJour && data.id) programmeCourantId = data.id;
+        document.getElementById('filename').textContent = nom + '.shc';
         fermerSauvegarder();
-        // petite notification dans la console
         const out = document.getElementById('console-output');
         const msg = document.createElement('span');
         msg.style.color = '#80ffb0';
-        msg.textContent = '[Programme "' + nom + '" sauvegardé]\n';
+        msg.textContent = '[Fichier "' + nom + '" ' +
+                          (miseAJour ? 'mis à jour' : 'sauvegardé') + ']\n';
         out.appendChild(msg);
+        if (document.getElementById('panel-fichiers').classList.contains('active')) {
+          chargerMesProgrammes();
+        }
+      } else {
+        alert(data.erreur || 'Erreur lors de la sauvegarde.');
       }
     }
   </script>

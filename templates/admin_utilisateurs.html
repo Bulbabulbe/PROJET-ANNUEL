@@ -37,6 +37,53 @@
     <h1 class="dashboard-title">Gestion des utilisateurs</h1>
 
     <section class="dash-section">
+      <h2 class="section-title">Ajouter un professeur</h2>
+      <button class="btn-run" onclick="toggleFormProf()">+ Créer un professeur</button>
+      <div id="form-prof" class="form-exo hidden">
+        {% if licences %}
+          <form method="POST" action="/admin/utilisateur/creer">
+            <div class="form-row">
+              <div class="form-group">
+                <label>Prénom</label>
+                <input type="text" name="prenom" required placeholder="Alice">
+              </div>
+              <div class="form-group">
+                <label>Nom</label>
+                <input type="text" name="nom" required placeholder="Dupont">
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Email</label>
+              <input type="email" name="email" required placeholder="prof@ecole.fr">
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Mot de passe (communiqué au prof)</label>
+                <input type="text" name="mot_de_passe" required placeholder="au moins 6 caractères">
+              </div>
+              <div class="form-group">
+                <label>École (licence)</label>
+                <select name="licence_id" required class="soum-input">
+                  <option value="">— Choisir une école —</option>
+                  {% for lic in licences %}
+                    <option value="{{ lic.id }}">{{ lic.label }} ({{ lic.code }})</option>
+                  {% endfor %}
+                </select>
+              </div>
+            </div>
+            <div class="form-actions">
+              <button type="button" class="btn-secondary" onclick="toggleFormProf()">Annuler</button>
+              <button type="submit" class="btn-run">Créer le professeur</button>
+            </div>
+          </form>
+        {% else %}
+          <p class="empty-text">Crée d'abord une école dans l'onglet <a href="/admin/licences" style="color:var(--shark-light)">Licences</a>.</p>
+        {% endif %}
+      </div>
+    </section>
+
+    <section class="dash-section">
+      <h2 class="section-title">Tous les comptes</h2>
       {% if utilisateurs %}
         <div class="stats-table-wrapper">
           <table class="stats-table">
@@ -94,6 +141,12 @@
     </section>
 
   </div>
+
+  <script>
+    function toggleFormProf() {
+      document.getElementById('form-prof').classList.toggle('hidden');
+    }
+  </script>
 
 </body>
 </html>
