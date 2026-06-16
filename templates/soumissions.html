@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="csrf-token" content="{{ csrf_token }}">
   <title>SharCode — Soumissions</title>
   <link rel="stylesheet" href="/static/css/style.css">
   <link rel="stylesheet" href="/static/css/auth.css">
@@ -15,12 +16,16 @@
       <span class="brand-name">SharCode</span>
       <span class="badge-prof">Prof</span>
     </div>
+    <div class="navbar-divider"></div>
     <nav class="navbar-links">
       <a href="/" class="nav-btn">Éditeur</a>
       <a href="/prof/dashboard" class="nav-btn">Dashboard</a>
     </nav>
     <div class="navbar-right">
-      <span class="user-info">{{ user.prenom }} {{ user.nom }}</span>
+      <div class="user-chip">
+        <div class="user-avatar">{{ user.prenom[0] | upper }}</div>
+        <span class="user-name">{{ user.prenom }} {{ user.nom }}</span>
+      </div>
       <a href="/logout" class="nav-btn nav-btn-logout">Déconnexion</a>
     </div>
   </header>
@@ -28,8 +33,12 @@
   <div class="dashboard-content">
     <a href="/prof/dashboard" class="back-link">← Retour au dashboard</a>
 
-    <h1 class="dashboard-title">Soumissions — {{ exercice.titre }}</h1>
-    <p class="exo-description">{{ exercice.description }}</p>
+    <h1 class="dashboard-title">{{ exercice.titre }}</h1>
+    <p class="exo-description" style="margin-bottom:1.5rem">{{ exercice.description }}</p>
+
+    {% if exercice.date_limite %}
+      <p class="exo-meta" style="margin-bottom:1rem">Date limite : {{ exercice.date_limite }}</p>
+    {% endif %}
 
     {% if soumissions %}
       <div class="soumissions-list">
@@ -46,8 +55,7 @@
                   <span class="status-pill status-on">À temps</span>
                 {% endif %}
               {% endif %}
-              <a href="/prof/soumission/{{ s.id }}/telecharger"
-                 class="btn-secondary btn-small">
+              <a href="/prof/soumission/{{ s.id }}/telecharger" class="btn-secondary btn-small">
                 Télécharger .shc
               </a>
             </div>
@@ -55,7 +63,7 @@
               <p class="soum-commentaire"><em>{{ s.commentaire }}</em></p>
             {% endif %}
             <details>
-              <summary>Voir le code</summary>
+              <summary style="color:#6688aa;font-size:.85rem;cursor:pointer">Voir le code</summary>
               <pre class="exo-code">{{ s.code }}</pre>
             </details>
           </div>

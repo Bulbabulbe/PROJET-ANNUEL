@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SharCode — Apprendre à coder en français</title>
+  <meta name="csrf-token" content="{{ csrf_token }}">
+  <title>SharCode — Éditeur</title>
   <link rel="stylesheet" href="/static/css/style.css">
   <link rel="stylesheet" href="/static/css/auth.css">
 </head>
@@ -16,12 +17,16 @@
       <span class="brand-name">SharCode</span>
       <span class="brand-version">v1.0</span>
     </div>
+
+    <div class="navbar-divider"></div>
+
     <nav class="navbar-links">
       <button class="nav-btn active" data-panel="apprendre" onclick="showPanel('apprendre')">Apprendre</button>
       <button class="nav-btn" data-panel="reference" onclick="showPanel('reference')">Référence</button>
       <button class="nav-btn" data-panel="exemples" onclick="showPanel('exemples')">Exemples</button>
       {% if user %}
-        <button class="nav-btn" data-panel="fichiers" onclick="showPanel('fichiers'); chargerMesProgrammes()">Mes fichiers</button>
+        <button class="nav-btn" data-panel="fichiers"
+                onclick="showPanel('fichiers'); chargerMesProgrammes()">Mes fichiers</button>
       {% endif %}
       {% if user and user.role == 'etudiant' %}
         <a href="/etudiant/exercices" class="nav-btn">Exercices</a>
@@ -30,15 +35,18 @@
         <a href="/prof/dashboard" class="nav-btn">Dashboard</a>
       {% endif %}
     </nav>
+
     <div class="navbar-right">
       {% if user %}
-        <span class="user-info">{{ user.prenom }}</span>
-        <button class="btn-secondary btn-small" onclick="ouvrirSauvegarder()" title="Sauvegarder mon programme">
-          Sauvegarder
-        </button>
+        <button class="btn-secondary" style="font-size:.78rem;padding:.3rem .75rem"
+                onclick="ouvrirSauvegarder()">Sauvegarder</button>
+        <div class="user-chip">
+          <div class="user-avatar">{{ user.prenom[0] | upper }}</div>
+          <span class="user-name">{{ user.prenom }}</span>
+        </div>
         <a href="/logout" class="nav-btn nav-btn-logout">Quitter</a>
       {% else %}
-        <span class="tagline">Coder comme on parle</span>
+        <span style="font-size:.8rem;color:rgba(255,255,255,.4);font-style:italic">Coder comme on parle</span>
       {% endif %}
     </div>
   </header>
@@ -70,11 +78,11 @@
         </div>
         <div class="ref-section">
           <h3>Opérateurs</h3>
-          <code>+  &nbsp;addition / concaténation</code>
-          <code>-  &nbsp;soustraction</code>
-          <code>*  &nbsp;multiplication</code>
-          <code>/  &nbsp;division</code>
-          <code>%  &nbsp;modulo (reste)</code>
+          <code>+  addition / concaténation</code>
+          <code>-  soustraction</code>
+          <code>*  multiplication</code>
+          <code>/  division</code>
+          <code>%  modulo (reste)</code>
         </div>
         <div class="ref-section">
           <h3>Comparaisons</h3>
@@ -138,8 +146,12 @@
       <!-- Panel : Mes fichiers -->
       <div id="panel-fichiers" class="panel">
         <h2 class="panel-title">Mes fichiers</h2>
-        <p class="panel-subtitle">Tes programmes sauvegardés — clique sur « Ouvrir » pour les revoir et les modifier.</p>
-        <button class="btn-secondary btn-small" onclick="nouveauProgramme()" style="margin-bottom:0.75rem">+ Nouveau fichier</button>
+        <p class="panel-subtitle">Tes programmes sauvegardés.</p>
+        <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.75rem">
+          <button class="btn-secondary btn-small" onclick="nouveauProgramme()">+ Nouveau</button>
+          <button class="btn-secondary btn-small" onclick="importerFichiers()">Importer .shc</button>
+          <a href="/etudiant/programmes/telecharger" class="btn-secondary btn-small">Tout télécharger</a>
+        </div>
         <div id="programmes-list"></div>
       </div>
 
@@ -154,12 +166,8 @@
           <span class="filename" id="filename">mon_programme.shc</span>
         </div>
         <div class="toolbar-right">
-          <button class="btn-secondary" onclick="clearEditor()">
-            Effacer
-          </button>
-          <button class="btn-run" onclick="lancerCode()" id="btn-run">
-            &#9654; Lancer
-          </button>
+          <button class="btn-secondary" onclick="clearEditor()">Effacer</button>
+          <button class="btn-run" onclick="lancerCode()" id="btn-run">▶ Lancer</button>
         </div>
       </div>
 
@@ -172,10 +180,7 @@
           spellcheck="false"
           autocorrect="off"
           autocapitalize="off"
-          placeholder="# Écris ton code SharCode ici...
-# Exemple :
-prenom vaut &quot;Alice&quot;
-ecrire &quot;Bonjour &quot; plus prenom"
+          placeholder="# Écris ton code SharCode ici..."
           oninput="updateLineNumbers()"
           onscroll="syncScroll()"
           onkeydown="handleTab(event)"
@@ -199,28 +204,26 @@ ecrire &quot;Bonjour &quot; plus prenom"
           <button class="console-clear" onclick="clearConsole()">Effacer</button>
         </div>
         <div class="console-output" id="console-output">
-          <span class="console-welcome">SharCode 1.0 — Prêt. Écris ton code et clique sur Lancer.</span>
+          <span class="console-welcome">SharCode 1.0 — Prêt. Écris ton code et clique sur ▶ Lancer.</span>
         </div>
       </div>
 
     </section>
   </main>
 
-  <!-- ── LECON MODALE ─────────────────────────────────────── -->
+  <!-- ── MODAL LEÇON ─────────────────────────────────────── -->
   <div class="modal-overlay" id="modal-overlay" onclick="fermerLecon()"></div>
   <div class="modal" id="modal-lecon">
     <div class="modal-header">
       <h2 id="modal-titre"></h2>
-      <button class="modal-close" onclick="fermerLecon()">&#10005;</button>
+      <button class="modal-close" onclick="fermerLecon()">✕</button>
     </div>
     <div class="modal-body">
       <div id="modal-contenu"></div>
       <div class="modal-code-block">
         <div class="modal-code-header">
           <span>Exemple de code</span>
-          <button class="btn-charger" onclick="chargerExempleLecon()">
-            Charger dans l'éditeur
-          </button>
+          <button class="btn-charger" onclick="chargerExempleLecon()">Charger dans l'éditeur</button>
         </div>
         <pre id="modal-code"></pre>
       </div>
@@ -234,12 +237,12 @@ ecrire &quot;Bonjour &quot; plus prenom"
 
   <script src="/static/js/main.js"></script>
 
-  <!-- Modal sauvegarde programme -->
+  <!-- ── MODAL SAUVEGARDE ────────────────────────────────── -->
   <div class="modal-overlay" id="modal-save-overlay" onclick="fermerSauvegarder()" style="display:none"></div>
   <div class="modal" id="modal-save" style="display:none">
     <div class="modal-header">
       <h2>Sauvegarder le programme</h2>
-      <button class="modal-close" onclick="fermerSauvegarder()">&#10005;</button>
+      <button class="modal-close" onclick="fermerSauvegarder()">✕</button>
     </div>
     <div class="modal-body">
       <div class="form-group">
@@ -262,36 +265,37 @@ ecrire &quot;Bonjour &quot; plus prenom"
       document.getElementById('modal-save-overlay').style.display = 'block';
       document.getElementById('save-nom').focus();
     }
+
     function fermerSauvegarder() {
       document.getElementById('modal-save').style.display = 'none';
       document.getElementById('modal-save-overlay').style.display = 'none';
     }
+
     async function sauvegarderProgramme() {
       const code = document.getElementById('editor').value.trim();
       const nom  = document.getElementById('save-nom').value.trim() || 'mon_programme';
       if (!code) { alert('Éditeur vide.'); return; }
 
-      // Si un fichier est ouvert, on le met à jour ; sinon on en crée un nouveau.
-      const miseAJour = !!programmeCourantId;
+      const nomActuel = document.getElementById('filename').textContent.replace(/\.shc$/, '').trim();
+      const miseAJour = !!programmeCourantId && (nom === nomActuel);
       const url = miseAJour
         ? '/etudiant/programme/' + programmeCourantId + '/modifier'
         : '/etudiant/sauvegarder';
 
       const rep  = await fetch(url, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ nom, code })
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken() },
+        body:    JSON.stringify({ nom, code })
       });
       const data = await rep.json();
       if (data.succes) {
-        if (!miseAJour && data.id) programmeCourantId = data.id;
+        if (!miseAJour) programmeCourantId = data.id || null;
         document.getElementById('filename').textContent = nom + '.shc';
         fermerSauvegarder();
         const out = document.getElementById('console-output');
         const msg = document.createElement('span');
         msg.style.color = '#80ffb0';
-        msg.textContent = '[Fichier "' + nom + '" ' +
-                          (miseAJour ? 'mis à jour' : 'sauvegardé') + ']\n';
+        msg.textContent = '[Fichier "' + nom + '" ' + (miseAJour ? 'mis à jour' : 'sauvegardé') + ']\n';
         out.appendChild(msg);
         if (document.getElementById('panel-fichiers').classList.contains('active')) {
           chargerMesProgrammes();

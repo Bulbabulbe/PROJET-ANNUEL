@@ -54,23 +54,22 @@ ecrire "Tu as " + age + " ans."`,
     contenu: `
       <p>L'<strong>indentation</strong>, c'est les espaces au début de certaines lignes. En SharCode, le code qui est <em>à l'intérieur</em> d'un bloc (condition, boucle, fonction) doit être décalé vers la droite.</p>
       <p>Utilise la touche <strong>Tab</strong> pour indenter (4 espaces).</p>
-      <div class="highlight">si age >= 18 alors<br><span style="color:#0077b6">    </span>ecrire "Majeur"   <span style="color:#999"># décalé = à l'intérieur du si</span><br>fin<br><br>ecrire "Fin"   <span style="color:#999"># pas décalé = en dehors du si</span></div>
-      <p>SharCode utilise le mot <strong>fin</strong> pour fermer chaque bloc. L'indentation ne change pas le résultat pour l'ordinateur, mais elle rend le code <strong>beaucoup plus lisible</strong> pour toi et tes camarades.</p>
-      <p>Règle simple : chaque fois que tu ouvres un bloc (<em>alors</em>, <em>tant que</em>, <em>pour</em>, <em>fonction</em>), tu indentes. Quand tu écris <em>fin</em>, tu reviens en arrière.</p>
+      <div class="highlight">si age >= 18 alors<br><span style="color:#0077b6">    </span>ecrire "Majeur"<br>fin</div>
+      <p>SharCode utilise le mot <strong>fin</strong> pour fermer chaque bloc. L'indentation rend le code <strong>beaucoup plus lisible</strong>.</p>
     `,
     code: `# Exemple d'indentation
 x vaut 10
 
 si x > 5 alors
-    ecrire "x est grand"    # indenté : à l'intérieur du si
+    ecrire "x est grand"
     si x > 8 alors
-        ecrire "x est très grand"   # double indentation
+        ecrire "x est très grand"
     fin
 sinon
-    ecrire "x est petit"    # indenté : à l'intérieur du sinon
+    ecrire "x est petit"
 fin
 
-ecrire "Terminé"    # pas indenté : en dehors du si`
+ecrire "Terminé"`
   },
   {
     numero: 'Leçon 4',
@@ -80,12 +79,7 @@ ecrire "Terminé"    # pas indenté : en dehors du si`
       <p>Une <strong>condition</strong> permet d'exécuter du code différent selon une situation.</p>
       <div class="highlight">si condition alors<br>    ...<br>sinon<br>    ...<br>fin</div>
       <p>Les opérateurs de comparaison :</p>
-      <p>• <strong>==</strong> &nbsp;— égal à</p>
-      <p>• <strong>!=</strong> &nbsp;— différent de</p>
-      <p>• <strong>&lt;</strong> &nbsp;&nbsp;— inférieur à</p>
-      <p>• <strong>&gt;</strong> &nbsp;&nbsp;— supérieur à</p>
-      <p>• <strong>&lt;=</strong> — inférieur ou égal</p>
-      <p>• <strong>&gt;=</strong> — supérieur ou égal</p>
+      <p>• <strong>==</strong> &nbsp;— égal à &nbsp;• <strong>!=</strong> &nbsp;— différent de &nbsp;• <strong>&lt;</strong> &nbsp;&nbsp;— inférieur à &nbsp;• <strong>&gt;</strong> &nbsp;&nbsp;— supérieur à</p>
       <p>On peut combiner avec <strong>et</strong> / <strong>ou</strong>, et enchaîner avec <strong>sinon si</strong>.</p>
     `,
     code: `# Les conditions
@@ -99,16 +93,6 @@ sinon si note >= 10 alors
     ecrire "Admis"
 sinon
     ecrire "Insuffisant"
-fin
-
-# Combiner deux conditions
-age vaut 17
-permis vaut faux
-
-si age >= 18 et permis alors
-    ecrire "Tu peux conduire"
-sinon
-    ecrire "Tu ne peux pas conduire"
 fin`
   },
   {
@@ -116,12 +100,10 @@ fin`
     titre: 'Les boucles',
     desc: 'Répéter des instructions',
     contenu: `
-      <p>Il y a deux types de boucles en SharCode.</p>
       <p><strong>La boucle pour</strong> — quand on sait combien de fois on répète :</p>
       <div class="highlight">pour i de 1 a 10<br>    ...<br>fin</div>
       <p><strong>La boucle tant que</strong> — quand on répète jusqu'à ce qu'une condition soit fausse :</p>
       <div class="highlight">tant que condition<br>    ...<br>fin</div>
-      <p>Attention : dans une boucle <em>tant que</em>, il faut que la condition devienne fausse à un moment, sinon le programme tourne indéfiniment.</p>
     `,
     code: `# Boucle pour : table de 7
 pour i de 1 a 10
@@ -147,8 +129,6 @@ ecrire "Partez !"`
       <div class="highlight">fonction nom(parametre1, parametre2)<br>    ...<br>    retourner resultat<br>fin</div>
       <p>On appelle une fonction en écrivant son nom avec des parenthèses :</p>
       <div class="highlight">resultat vaut additionner(3, 4)</div>
-      <p>Les fonctions permettent d'<strong>éviter les répétitions</strong> : au lieu d'écrire le même code plusieurs fois, on l'écrit une fois dans une fonction.</p>
-      <p>C'est la base des <strong>bonnes pratiques</strong> en programmation.</p>
     `,
     code: `# Les fonctions
 fonction saluer(prenom)
@@ -185,7 +165,6 @@ essais vaut 0
 gagne vaut faux
 
 ecrire "=== Jeu du nombre secret (1 à 100) ==="
-ecrire ""
 
 tant que non gagne
     reponse vaut nombre(lire "Propose un nombre : ")
@@ -200,7 +179,6 @@ tant que non gagne
     fin
 fin
 
-ecrire ""
 ecrire "Bravo ! Trouvé en " + essais + " essai(s) !"`
   },
   {
@@ -280,7 +258,13 @@ fin`
 
 // ── Initialisation ────────────────────────────────────────────
 let leconActive = 0;
-let programmeCourantId = null;   // fichier élève actuellement ouvert (null = nouveau)
+let programmeCourantId = null;
+
+// Récupère le token CSRF depuis le meta tag
+function csrfToken() {
+  const m = document.querySelector('meta[name="csrf-token"]');
+  return m ? m.content : '';
+}
 
 document.addEventListener('DOMContentLoaded', () => {
   construireLecons();
@@ -290,6 +274,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function construireLecons() {
   const container = document.getElementById('lecons-list');
+  if (!container) return;
   LECONS.forEach((l, i) => {
     const card = document.createElement('div');
     card.className = 'lecon-card';
@@ -305,7 +290,8 @@ function construireLecons() {
 
 function construireExemples() {
   const container = document.getElementById('exemples-list');
-  EXEMPLES.forEach((ex, i) => {
+  if (!container) return;
+  EXEMPLES.forEach(ex => {
     const card = document.createElement('div');
     card.className = 'exemple-card';
     card.innerHTML = `
@@ -333,9 +319,9 @@ function showPanel(nom) {
 function ouvrirLecon(index) {
   leconActive = index;
   const l = LECONS[index];
-  document.getElementById('modal-titre').textContent   = `${l.numero} — ${l.titre}`;
-  document.getElementById('modal-contenu').innerHTML   = l.contenu;
-  document.getElementById('modal-code').textContent    = l.code;
+  document.getElementById('modal-titre').textContent    = `${l.numero} — ${l.titre}`;
+  document.getElementById('modal-contenu').innerHTML    = l.contenu;
+  document.getElementById('modal-code').textContent     = l.code;
   document.getElementById('modal-progress').textContent = `${index + 1} / ${LECONS.length}`;
 
   const btnPrev = document.getElementById('btn-prev-lecon');
@@ -354,11 +340,10 @@ function fermerLecon() {
 
 function navLecon(direction) {
   const next = leconActive + direction;
-  // Marquer la leçon actuelle comme complétée
   const l = LECONS[leconActive];
   fetch('/etudiant/lecon', {
     method: 'POST',
-    headers: {'Content-Type': 'application/json'},
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken() },
     body: JSON.stringify({ lecon_id: leconActive + 1, lecon_titre: l.titre })
   }).catch(() => {});
   if (next < 0 || next >= LECONS.length) { fermerLecon(); return; }
@@ -387,7 +372,7 @@ function chargerExemple(ex) {
 }
 
 
-// ── Éditeur ───────────────────────────────────────────────────
+// ── Éditeur principal ─────────────────────────────────────────
 function handleTab(e) {
   if (e.key !== 'Tab') return;
   e.preventDefault();
@@ -396,19 +381,20 @@ function handleTab(e) {
   const end   = ta.selectionEnd;
   ta.value = ta.value.substring(0, start) + '    ' + ta.value.substring(end);
   ta.selectionStart = ta.selectionEnd = start + 4;
+  updateLineNumbers();
 }
 
 function updateLineNumbers() {
-  const editor  = document.getElementById('editor');
-  const lines   = editor.value.split('\n');
-  const nums    = lines.map((_, i) => i + 1).join('\n');
-  document.getElementById('line-numbers').textContent = nums || '1';
+  const editor = document.getElementById('editor');
+  if (!editor) return;
+  const lines = editor.value.split('\n');
+  document.getElementById('line-numbers').textContent = lines.map((_, i) => i + 1).join('\n') || '1';
 }
 
 function syncScroll() {
   const editor = document.getElementById('editor');
   const ln     = document.getElementById('line-numbers');
-  ln.scrollTop = editor.scrollTop;
+  if (editor && ln) ln.scrollTop = editor.scrollTop;
 }
 
 function clearEditor() {
@@ -440,14 +426,13 @@ async function lancerCode() {
   try {
     const res  = await fetch('/executer', {
       method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken() },
       body:    JSON.stringify({ code, entrees })
     });
     const data = await res.json();
 
     if (data.succes) {
-      const texte = data.sortie || '(Aucune sortie)';
-      afficherConsole(texte, 'console-success');
+      afficherConsole(data.sortie || '(Aucune sortie)', 'console-success');
     } else {
       afficherConsole('Erreur — ' + data.erreur, 'console-error');
     }
@@ -455,7 +440,7 @@ async function lancerCode() {
     afficherConsole('Impossible de contacter le serveur.', 'console-error');
   } finally {
     btn.disabled = false;
-    btn.textContent = '&#9654; Lancer';
+    btn.textContent = '▶ Lancer';
   }
 }
 
@@ -473,7 +458,6 @@ function clearConsole() {
     '<span class="console-welcome">Console effacée.</span>';
 }
 
-// Raccourci clavier : Ctrl+Entrée pour lancer
 document.addEventListener('keydown', e => {
   if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
     e.preventDefault();
@@ -482,7 +466,7 @@ document.addEventListener('keydown', e => {
 });
 
 
-// ── Mes fichiers (programmes sauvegardés de l'élève) ──────────
+// ── Mes fichiers ──────────────────────────────────────────────
 function escapeHtml(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
@@ -494,8 +478,8 @@ async function chargerMesProgrammes() {
   if (!container) return;
   container.innerHTML = '<p class="panel-subtitle">Chargement...</p>';
   try {
-    const rep  = await fetch('/etudiant/programmes');
-    const data = await rep.json();
+    const rep   = await fetch('/etudiant/programmes');
+    const data  = await rep.json();
     const progs = data.programmes || [];
     if (progs.length === 0) {
       container.innerHTML = '<p class="panel-subtitle">Aucun fichier sauvegardé pour l\'instant.</p>';
@@ -539,7 +523,7 @@ function ouvrirProgramme(id, nom, code) {
   document.getElementById('editor').value = code || '';
   document.getElementById('filename').textContent = (nom || 'mon_programme') + '.shc';
   updateLineNumbers();
-  showPanel('apprendre');  // retour à l'éditeur
+  showPanel('apprendre');
 }
 
 function nouveauProgramme() {
@@ -552,7 +536,51 @@ function nouveauProgramme() {
 
 async function supprimerMonProgramme(id, nom) {
   if (!confirm('Supprimer le fichier "' + nom + '" ?')) return;
-  await fetch('/etudiant/programme/' + id + '/supprimer', { method: 'POST' });
+  await fetch('/etudiant/programme/' + id + '/supprimer', {
+    method: 'POST',
+    headers: { 'X-CSRF-Token': csrfToken() }
+  });
   if (programmeCourantId === id) nouveauProgramme();
   chargerMesProgrammes();
+}
+
+// Import de fichiers locaux .shc
+function importerFichiers() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.shc,.txt';
+  input.multiple = true;
+  input.onchange = async () => {
+    if (!input.files.length) return;
+    const form = new FormData();
+    for (const f of input.files) form.append('fichiers', f);
+    form.append('csrf_token', csrfToken());
+
+    try {
+      const rep  = await fetch('/etudiant/importer', { method: 'POST', body: form });
+      const data = await rep.json();
+      if (data.succes) {
+        const n = data.sauvegardes ? data.sauvegardes.length : 0;
+        alert(n + ' fichier(s) importé(s) avec succès.');
+        chargerMesProgrammes();
+      } else {
+        alert(data.erreur || 'Erreur lors de l\'import.');
+      }
+    } catch (e) {
+      alert('Erreur réseau lors de l\'import.');
+    }
+  };
+  input.click();
+}
+
+
+// ── Toggle visibilité mot de passe ────────────────────────────
+function toggleMdp(btn) {
+  const input = btn.closest('.password-wrapper').querySelector('input');
+  if (!input) return;
+  const isHidden = input.type === 'password';
+  input.type = isHidden ? 'text' : 'password';
+  // Mise à jour de l'icône
+  btn.querySelector('.eye-open').style.display  = isHidden ? 'none'  : 'block';
+  btn.querySelector('.eye-close').style.display = isHidden ? 'block' : 'none';
 }

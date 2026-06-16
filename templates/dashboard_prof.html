@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="csrf-token" content="{{ csrf_token }}">
   <title>SharCode — Dashboard professeur</title>
   <link rel="stylesheet" href="/static/css/style.css">
   <link rel="stylesheet" href="/static/css/auth.css">
@@ -15,12 +16,16 @@
       <span class="brand-name">SharCode</span>
       <span class="badge-prof">Prof</span>
     </div>
+    <div class="navbar-divider"></div>
     <nav class="navbar-links">
       <a href="/" class="nav-btn">Éditeur</a>
       <a href="/prof/dashboard" class="nav-btn active">Dashboard</a>
     </nav>
     <div class="navbar-right">
-      <span class="user-info">{{ user.prenom }} {{ user.nom }}</span>
+      <div class="user-chip">
+        <div class="user-avatar">{{ user.prenom[0] | upper }}</div>
+        <span class="user-name">{{ user.prenom }} {{ user.nom }}</span>
+      </div>
       <a href="/logout" class="nav-btn nav-btn-logout">Déconnexion</a>
     </div>
   </header>
@@ -33,14 +38,16 @@
       {% endfor %}
     {% endwith %}
 
-    <!-- Mes élèves -->
+    <!-- ── Mes élèves ─────────────────────────────────── -->
     <section class="dash-section">
       <h2 class="section-title">Mes élèves{% if ecole %} — {{ ecole }}{% endif %}</h2>
 
       {% if user.licence_id %}
         <button class="btn-run" onclick="toggleFormEleve()">+ Créer un élève</button>
+
         <div id="form-eleve" class="form-exo hidden">
           <form method="POST" action="/prof/eleve/creer">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <div class="form-row">
               <div class="form-group">
                 <label>Prénom</label>
@@ -63,7 +70,17 @@
             </div>
             <div class="form-group">
               <label>Mot de passe (communiqué à l'élève)</label>
-              <input type="text" name="mot_de_passe" required placeholder="au moins 6 caractères">
+              <div class="password-wrapper">
+                <input type="password" name="mot_de_passe" required placeholder="au moins 6 caractères">
+                <button type="button" class="eye-toggle" onclick="toggleMdp(this)">
+                  <svg class="eye-open" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+                  </svg>
+                  <svg class="eye-close" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" style="display:none">
+                    <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>
+                  </svg>
+                </button>
+              </div>
             </div>
             <div class="form-actions">
               <button type="button" class="btn-secondary" onclick="toggleFormEleve()">Annuler</button>
@@ -76,7 +93,12 @@
           <div class="stats-table-wrapper" style="margin-top:1rem">
             <table class="stats-table">
               <thead>
-                <tr><th>Élève</th><th>Classe</th><th>Email</th><th>Actions</th></tr>
+                <tr>
+                  <th>Élève</th>
+                  <th>Classe</th>
+                  <th>Email</th>
+                  <th>Actions</th>
+                </tr>
               </thead>
               <tbody>
                 {% for e in eleves %}
@@ -85,10 +107,76 @@
                     <td>{{ e.classe or '—' }}</td>
                     <td>{{ e.email }}</td>
                     <td>
-                      <form class="inline-form" method="POST" action="/prof/eleve/{{ e.id }}/supprimer"
-                            onsubmit="return confirm('Supprimer {{ e.prenom }} {{ e.nom }} et toutes ses données ?')">
-                        <button type="submit" class="btn-danger btn-small">Supprimer</button>
-                      </form>
+                      <div class="table-actions">
+                        <button class="btn-secondary btn-small"
+                                onclick="toggleEditEleve({{ e.id }})">Modifier</button>
+                        <button class="btn-warning btn-small"
+                                onclick="toggleMdpEleve({{ e.id }})">Changer MDP</button>
+                        <form class="inline-form" method="POST"
+                              action="/prof/eleve/{{ e.id }}/supprimer"
+                              onsubmit="return confirm('Supprimer {{ e.prenom }} {{ e.nom }} et toutes ses données ?')">
+                          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                          <button type="submit" class="btn-danger btn-small">Supprimer</button>
+                        </form>
+                      </div>
+
+                      <!-- Formulaire inline modifier élève -->
+                      <div id="edit-eleve-{{ e.id }}" class="modal-dark hidden" style="margin-top:.75rem">
+                        <form method="POST" action="/prof/eleve/{{ e.id }}/modifier">
+                          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                          <div class="form-row">
+                            <div class="form-group">
+                              <label>Prénom</label>
+                              <input type="text" name="prenom" value="{{ e.prenom }}" required>
+                            </div>
+                            <div class="form-group">
+                              <label>Nom</label>
+                              <input type="text" name="nom" value="{{ e.nom }}" required>
+                            </div>
+                          </div>
+                          <div class="form-row">
+                            <div class="form-group">
+                              <label>Email</label>
+                              <input type="email" name="email" value="{{ e.email }}" required>
+                            </div>
+                            <div class="form-group">
+                              <label>Classe</label>
+                              <input type="text" name="classe" value="{{ e.classe or '' }}">
+                            </div>
+                          </div>
+                          <div class="form-actions" style="margin-top:.5rem">
+                            <button type="button" class="btn-secondary btn-small"
+                                    onclick="toggleEditEleve({{ e.id }})">Annuler</button>
+                            <button type="submit" class="btn-run btn-small">Enregistrer</button>
+                          </div>
+                        </form>
+                      </div>
+
+                      <!-- Formulaire inline changer mot de passe élève -->
+                      <div id="mdp-eleve-{{ e.id }}" class="modal-dark hidden" style="margin-top:.75rem">
+                        <form method="POST" action="/prof/eleve/{{ e.id }}/changer-mdp">
+                          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                          <div class="form-group">
+                            <label>Nouveau mot de passe</label>
+                            <div class="password-wrapper">
+                              <input type="password" name="nouveau_mdp" required placeholder="au moins 6 caractères">
+                              <button type="button" class="eye-toggle" onclick="toggleMdp(this)">
+                                <svg class="eye-open" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+                                </svg>
+                                <svg class="eye-close" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" style="display:none">
+                                  <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>
+                                </svg>
+                              </button>
+                            </div>
+                          </div>
+                          <div class="form-actions" style="margin-top:.5rem">
+                            <button type="button" class="btn-secondary btn-small"
+                                    onclick="toggleMdpEleve({{ e.id }})">Annuler</button>
+                            <button type="submit" class="btn-run btn-small">Changer</button>
+                          </div>
+                        </form>
+                      </div>
                     </td>
                   </tr>
                 {% endfor %}
@@ -96,14 +184,14 @@
             </table>
           </div>
         {% else %}
-          <p class="empty-text">Aucun élève dans ton école pour l'instant. Crée-en un ci-dessus.</p>
+          <p class="empty-text" style="margin-top:1rem">Aucun élève dans ton école pour l'instant.</p>
         {% endif %}
       {% else %}
         <p class="empty-text">Ton compte n'est rattaché à aucune école. Contacte l'administrateur.</p>
       {% endif %}
     </section>
 
-    <!-- Statistiques des élèves -->
+    <!-- ── Progression des élèves ─────────────────────── -->
     <section class="dash-section">
       <h2 class="section-title">Progression des élèves</h2>
       {% if stats %}
@@ -113,15 +201,14 @@
               <tr>
                 <th>Élève</th>
                 <th>Classe</th>
-                <th>Leçons complétées</th>
+                <th>Leçons</th>
                 <th>Programmes</th>
-                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
               {% for s in stats %}
                 <tr>
-                  <td>{{ s.prenom }} {{ s.nom }}{% if s.ecole %} <span class="role-tag">({{ s.ecole }})</span>{% endif %}</td>
+                  <td>{{ s.prenom }} {{ s.nom }}</td>
                   <td>{{ s.classe or '—' }}</td>
                   <td>
                     <div class="progress-bar-wrapper">
@@ -131,11 +218,8 @@
                   </td>
                   <td>
                     <a href="/prof/etudiant/{{ s.id }}/programmes" class="btn-secondary btn-small">
-                      Télécharger les programmes
+                      Télécharger ZIP
                     </a>
-                  </td>
-                  <td>
-                    <!-- détail lecons dans future version -->
                   </td>
                 </tr>
               {% endfor %}
@@ -147,7 +231,7 @@
       {% endif %}
     </section>
 
-    <!-- Exercices -->
+    <!-- ── Exercices ──────────────────────────────────── -->
     <section class="dash-section">
       <h2 class="section-title">Mes exercices</h2>
 
@@ -155,6 +239,7 @@
 
       <div id="form-exo" class="form-exo hidden">
         <form method="POST" action="/prof/exercice/creer">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
           <div class="form-group">
             <label>Titre de l'exercice</label>
             <input type="text" name="titre" required placeholder="ex. Calculatrice simple">
@@ -189,7 +274,7 @@
               </div>
               <p class="exo-description">{{ exo.description }}</p>
               {% if exo.date_limite %}
-                <p class="exo-meta">📅 À rendre avant le {{ exo.date_limite }}</p>
+                <p class="exo-meta">Avant le {{ exo.date_limite }}</p>
               {% endif %}
               <div class="exo-actions">
                 <a href="/prof/exercice/{{ exo.id }}/soumissions" class="btn-secondary btn-small">
@@ -197,6 +282,7 @@
                 </a>
                 <form method="POST" action="/prof/exercice/{{ exo.id }}/supprimer"
                       onsubmit="return confirm('Supprimer cet exercice ?')">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                   <button type="submit" class="btn-danger btn-small">Supprimer</button>
                 </form>
               </div>
@@ -210,13 +296,12 @@
 
   </div>
 
+  <script src="/static/js/main.js"></script>
   <script>
-    function toggleFormExo() {
-      document.getElementById('form-exo').classList.toggle('hidden');
-    }
-    function toggleFormEleve() {
-      document.getElementById('form-eleve').classList.toggle('hidden');
-    }
+    function toggleFormExo()          { document.getElementById('form-exo').classList.toggle('hidden'); }
+    function toggleFormEleve()        { document.getElementById('form-eleve').classList.toggle('hidden'); }
+    function toggleEditEleve(id)      { document.getElementById('edit-eleve-' + id).classList.toggle('hidden'); }
+    function toggleMdpEleve(id)       { document.getElementById('mdp-eleve-' + id).classList.toggle('hidden'); }
   </script>
 
 </body>

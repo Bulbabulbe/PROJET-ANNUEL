@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="csrf-token" content="{{ csrf_token }}">
   <title>SharCode — Licences</title>
   <link rel="stylesheet" href="/static/css/style.css">
   <link rel="stylesheet" href="/static/css/auth.css">
@@ -15,13 +16,17 @@
       <span class="brand-name">SharCode</span>
       <span class="badge-admin">Admin</span>
     </div>
+    <div class="navbar-divider"></div>
     <nav class="navbar-links">
       <a href="/admin/dashboard" class="nav-btn">Tableau de bord</a>
       <a href="/admin/licences" class="nav-btn active">Licences</a>
       <a href="/admin/utilisateurs" class="nav-btn">Utilisateurs</a>
     </nav>
     <div class="navbar-right">
-      <span class="user-info">{{ user.prenom }} {{ user.nom }}</span>
+      <div class="user-chip">
+        <div class="user-avatar">{{ user.prenom[0] | upper }}</div>
+        <span class="user-name">{{ user.prenom }} {{ user.nom }}</span>
+      </div>
       <a href="/logout" class="nav-btn nav-btn-logout">Déconnexion</a>
     </div>
   </header>
@@ -36,22 +41,26 @@
 
     <h1 class="dashboard-title">Gestion des licences</h1>
 
+    <!-- ── Créer une licence ────────────────────────────── -->
     <section class="dash-section">
       <button class="btn-run" onclick="toggleFormLicence()">+ Créer une licence</button>
 
       <div id="form-licence" class="form-exo hidden">
         <form method="POST" action="/admin/licence/creer">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
           <div class="form-group">
             <label>Libellé (établissement)</label>
             <input type="text" name="label" required placeholder="ex. Collège Jean Moulin">
           </div>
-          <div class="form-group">
-            <label>Nombre maximum de professeurs</label>
-            <input type="number" name="max_profs" value="5" min="1">
-          </div>
-          <div class="form-group">
-            <label>Date d'expiration (facultatif)</label>
-            <input type="date" name="date_expiration">
+          <div class="form-row">
+            <div class="form-group">
+              <label>Nombre maximum de professeurs</label>
+              <input type="number" name="max_profs" value="5" min="1">
+            </div>
+            <div class="form-group">
+              <label>Date d'expiration (facultatif)</label>
+              <input type="date" name="date_expiration">
+            </div>
           </div>
           <div class="form-actions">
             <button type="button" class="btn-secondary" onclick="toggleFormLicence()">Annuler</button>
@@ -61,6 +70,7 @@
       </div>
     </section>
 
+    <!-- ── Liste des licences ───────────────────────────── -->
     <section class="dash-section">
       <h2 class="section-title">Licences existantes</h2>
       {% if licences %}
@@ -92,14 +102,47 @@
                   </td>
                   <td>
                     <div class="table-actions">
-                      <form class="inline-form" method="POST" action="/admin/licence/{{ lic.id }}/toggle">
+                      <button class="btn-secondary btn-small"
+                              onclick="toggleEditLicence({{ lic.id }})">Modifier</button>
+                      <form class="inline-form" method="POST"
+                            action="/admin/licence/{{ lic.id }}/toggle">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                         <button type="submit" class="btn-secondary btn-small">
                           {{ 'Désactiver' if lic.active else 'Activer' }}
                         </button>
                       </form>
-                      <form class="inline-form" method="POST" action="/admin/licence/{{ lic.id }}/supprimer"
+                      <form class="inline-form" method="POST"
+                            action="/admin/licence/{{ lic.id }}/supprimer"
                             onsubmit="return confirm('Supprimer cette licence ? Les profs liés seront détachés.')">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                         <button type="submit" class="btn-danger btn-small">Supprimer</button>
+                      </form>
+                    </div>
+
+                    <!-- Formulaire inline modifier licence -->
+                    <div id="edit-licence-{{ lic.id }}" class="modal-dark hidden" style="margin-top:.75rem">
+                      <form method="POST" action="/admin/licence/{{ lic.id }}/modifier">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        <div class="form-group">
+                          <label>Libellé</label>
+                          <input type="text" name="label" value="{{ lic.label }}" required>
+                        </div>
+                        <div class="form-row">
+                          <div class="form-group">
+                            <label>Max professeurs</label>
+                            <input type="number" name="max_profs" value="{{ lic.max_profs }}" min="1">
+                          </div>
+                          <div class="form-group">
+                            <label>Date d'expiration</label>
+                            <input type="date" name="date_expiration"
+                                   value="{{ lic.date_expiration or '' }}">
+                          </div>
+                        </div>
+                        <div class="form-actions" style="margin-top:.5rem">
+                          <button type="button" class="btn-secondary btn-small"
+                                  onclick="toggleEditLicence({{ lic.id }})">Annuler</button>
+                          <button type="submit" class="btn-run btn-small">Enregistrer</button>
+                        </div>
                       </form>
                     </div>
                   </td>
@@ -115,10 +158,10 @@
 
   </div>
 
+  <script src="/static/js/main.js"></script>
   <script>
-    function toggleFormLicence() {
-      document.getElementById('form-licence').classList.toggle('hidden');
-    }
+    function toggleFormLicence()      { document.getElementById('form-licence').classList.toggle('hidden'); }
+    function toggleEditLicence(id)    { document.getElementById('edit-licence-' + id).classList.toggle('hidden'); }
   </script>
 
 </body>

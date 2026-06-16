@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="csrf-token" content="{{ csrf_token }}">
   <title>SharCode — Mes exercices</title>
   <link rel="stylesheet" href="/static/css/style.css">
   <link rel="stylesheet" href="/static/css/auth.css">
@@ -14,12 +15,16 @@
       <span class="shark-icon">🦈</span>
       <span class="brand-name">SharCode</span>
     </div>
+    <div class="navbar-divider"></div>
     <nav class="navbar-links">
       <a href="/" class="nav-btn">Éditeur</a>
       <a href="/etudiant/exercices" class="nav-btn active">Exercices</a>
     </nav>
     <div class="navbar-right">
-      <span class="user-info">{{ user.prenom }} {{ user.nom }}</span>
+      <div class="user-chip">
+        <div class="user-avatar">{{ user.prenom[0] | upper }}</div>
+        <span class="user-name">{{ user.prenom }} {{ user.nom }}</span>
+      </div>
       <a href="/logout" class="nav-btn nav-btn-logout">Déconnexion</a>
     </div>
   </header>
@@ -43,9 +48,9 @@
               <h3 class="exo-titre">{{ exo.titre }}</h3>
               {% if ma_soum %}
                 {% if exo.date_limite and ma_soum.en_retard %}
-                  <span class="status-pill status-off">Rendu en retard</span>
+                  <span class="status-pill status-off">En retard</span>
                 {% elif exo.date_limite %}
-                  <span class="status-pill status-on">Rendu à temps</span>
+                  <span class="status-pill status-on">À temps</span>
                 {% else %}
                   <span class="badge-done">Rendu</span>
                 {% endif %}
@@ -54,7 +59,7 @@
             <p class="exo-description">{{ exo.description }}</p>
             <p class="exo-meta">Par {{ exo.prof_prenom }} {{ exo.prof_nom }}</p>
             {% if exo.date_limite %}
-              <p class="exo-meta">📅 À rendre avant le {{ exo.date_limite }}</p>
+              <p class="exo-meta">Avant le {{ exo.date_limite }}</p>
             {% endif %}
 
             {% if exo.code_exemple %}
@@ -66,12 +71,14 @@
 
             {% if not ma_soum %}
               <button class="btn-run btn-exo" data-exo-id="{{ exo.id }}"
-                      data-code="{{ exo.code_exemple or '' }}" onclick="ouvrirSoumissionBtn(this)">
-                Répondre dans l'éditeur
+                      data-code="{{ exo.code_exemple or '' }}"
+                      onclick="ouvrirSoumissionBtn(this)">
+                Répondre à l'exercice
               </button>
             {% else %}
               <button class="btn-secondary btn-exo" data-exo-id="{{ exo.id }}"
-                      data-code="{{ ma_soum.code or '' }}" onclick="ouvrirSoumissionBtn(this)">
+                      data-code="{{ ma_soum.code or '' }}"
+                      onclick="ouvrirSoumissionBtn(this)">
                 Modifier ma réponse
               </button>
             {% endif %}
@@ -80,8 +87,10 @@
       </div>
     {% else %}
       <div class="empty-state">
-        <p>Aucun exercice disponible pour l'instant.</p>
-        <a href="/" class="btn-run">Aller coder</a>
+        {% if not exercices %}
+          <p>Aucun exercice disponible pour ton école pour l'instant.</p>
+        {% endif %}
+        <a href="/" class="btn-run" style="display:inline-block;margin-top:1rem">Aller coder</a>
       </div>
     {% endif %}
 
@@ -100,7 +109,7 @@
               {% endif %}
             {% endif %}
             <details>
-              <summary>Voir mon code</summary>
+              <summary style="color:#6688aa;font-size:.85rem;cursor:pointer">Voir mon code</summary>
               <pre class="exo-code">{{ s.code }}</pre>
             </details>
           </div>
@@ -110,17 +119,29 @@
 
   </div>
 
-  <!-- Modal soumission -->
+  <!-- ── MODAL RÉPONSE EXERCICE ──────────────────────────── -->
   <div class="modal-overlay" id="modal-soum-overlay" onclick="fermerModal()"></div>
-  <div class="modal" id="modal-soum" style="display:none">
+  <div class="modal" id="modal-soum" style="display:none;max-width:760px">
     <div class="modal-header">
-      <h2>Soumettre ma réponse</h2>
-      <button class="modal-close" onclick="fermerModal()">&#10005;</button>
+      <h2 id="modal-soum-titre">Répondre à l'exercice</h2>
+      <button class="modal-close" onclick="fermerModal()">✕</button>
     </div>
     <div class="modal-body">
-      <p class="modal-hint">Colle ou écris ton code ci-dessous, puis soumets.</p>
-      <textarea id="soum-code" class="soum-textarea" rows="12" spellcheck="false"></textarea>
-      <div class="form-group" style="margin-top:0.75rem">
+      <div class="modal-actions-row">
+        <p class="modal-hint" style="margin:0;flex:1">Écris ou colle ton code SharCode ci-dessous.</p>
+        <button class="btn-secondary btn-small" onclick="chargerDepuisEditeur()"
+                title="Utiliser le code actuellement dans l'éditeur principal">
+          Depuis l'éditeur
+        </button>
+      </div>
+      <div class="soum-editor-wrapper">
+        <div class="soum-line-numbers" id="soum-line-numbers">1</div>
+        <textarea id="soum-code" class="soum-textarea" spellcheck="false"
+                  oninput="updateSoumLineNumbers()"
+                  onscroll="syncSoumScroll()"
+                  onkeydown="handleSoumTab(event)"></textarea>
+      </div>
+      <div class="form-group">
         <label for="soum-commentaire">Commentaire (facultatif)</label>
         <input type="text" id="soum-commentaire" placeholder="Explique ta démarche..." class="soum-input">
       </div>
@@ -131,21 +152,26 @@
     </div>
   </div>
 
+  <script src="/static/js/main.js"></script>
   <script>
     let exoIdCourant = null;
 
     function ouvrirSoumissionBtn(btn) {
       const exoId = btn.getAttribute('data-exo-id');
-      const code = btn.getAttribute('data-code');
-      ouvrirSoumission(parseInt(exoId), code);
+      const code  = btn.getAttribute('data-code');
+      const titre = btn.closest('.exo-card').querySelector('.exo-titre').textContent;
+      ouvrirSoumission(parseInt(exoId), code, titre);
     }
 
-    function ouvrirSoumission(exoId, codeEx) {
+    function ouvrirSoumission(exoId, codeEx, titre) {
       exoIdCourant = exoId;
+      document.getElementById('modal-soum-titre').textContent = titre || 'Répondre à l\'exercice';
       document.getElementById('soum-code').value = codeEx || '';
       document.getElementById('soum-commentaire').value = '';
+      updateSoumLineNumbers();
       document.getElementById('modal-soum').style.display = 'flex';
       document.getElementById('modal-soum-overlay').style.display = 'block';
+      document.getElementById('soum-code').focus();
     }
 
     function fermerModal() {
@@ -153,22 +179,59 @@
       document.getElementById('modal-soum-overlay').style.display = 'none';
     }
 
+    // Charge le code de l'éditeur principal dans la modale
+    function chargerDepuisEditeur() {
+      const editeur = window.opener
+        ? null
+        : document.getElementById('editor');
+      if (editeur && editeur.value.trim()) {
+        document.getElementById('soum-code').value = editeur.value;
+        updateSoumLineNumbers();
+      } else {
+        alert('L\'éditeur principal est vide. Retourne sur l\'éditeur et écris d\'abord ton code.');
+      }
+    }
+
+    function updateSoumLineNumbers() {
+      const ta    = document.getElementById('soum-code');
+      const lines = ta.value.split('\n');
+      document.getElementById('soum-line-numbers').textContent =
+        lines.map((_, i) => i + 1).join('\n') || '1';
+    }
+
+    function syncSoumScroll() {
+      const ta = document.getElementById('soum-code');
+      const ln = document.getElementById('soum-line-numbers');
+      ln.scrollTop = ta.scrollTop;
+    }
+
+    function handleSoumTab(e) {
+      if (e.key !== 'Tab') return;
+      e.preventDefault();
+      const ta    = e.target;
+      const start = ta.selectionStart;
+      const end   = ta.selectionEnd;
+      ta.value = ta.value.substring(0, start) + '    ' + ta.value.substring(end);
+      ta.selectionStart = ta.selectionEnd = start + 4;
+      updateSoumLineNumbers();
+    }
+
     async function envoyerSoumission() {
-      const code = document.getElementById('soum-code').value.trim();
+      const code       = document.getElementById('soum-code').value.trim();
       const commentaire = document.getElementById('soum-commentaire').value.trim();
       if (!code) { alert('Écris ton code avant de soumettre.'); return; }
 
-      const rep = await fetch('/etudiant/soumettre', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ exercice_id: exoIdCourant, code, commentaire })
+      const rep  = await fetch('/etudiant/soumettre', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken() },
+        body:    JSON.stringify({ exercice_id: exoIdCourant, code, commentaire })
       });
       const data = await rep.json();
       if (data.succes) {
         fermerModal();
         location.reload();
       } else {
-        alert('Erreur lors de la soumission.');
+        alert(data.erreur || 'Erreur lors de la soumission.');
       }
     }
   </script>

@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="csrf-token" content="{{ csrf_token }}">
   <title>SharCode — Administration</title>
   <link rel="stylesheet" href="/static/css/style.css">
   <link rel="stylesheet" href="/static/css/auth.css">
@@ -15,13 +16,17 @@
       <span class="brand-name">SharCode</span>
       <span class="badge-admin">Admin</span>
     </div>
+    <div class="navbar-divider"></div>
     <nav class="navbar-links">
       <a href="/admin/dashboard" class="nav-btn active">Tableau de bord</a>
       <a href="/admin/licences" class="nav-btn">Licences</a>
       <a href="/admin/utilisateurs" class="nav-btn">Utilisateurs</a>
     </nav>
     <div class="navbar-right">
-      <span class="user-info">{{ user.prenom }} {{ user.nom }}</span>
+      <div class="user-chip">
+        <div class="user-avatar">{{ user.prenom[0] | upper }}</div>
+        <span class="user-name">{{ user.prenom }} {{ user.nom }}</span>
+      </div>
       <a href="/logout" class="nav-btn nav-btn-logout">Déconnexion</a>
     </div>
   </header>

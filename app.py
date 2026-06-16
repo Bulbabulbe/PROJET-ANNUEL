@@ -1,12 +1,13 @@
 """
 SharCode — Serveur web (Flask)
-Lance avec : python app.py
-Puis ouvre  : http://localhost:5000
 """
 
 import io
 import os
+import secrets
+import zipfile
 from contextlib import redirect_stdout
+from functools import wraps
 
 from flask import (Flask, render_template, request, jsonify,
                    redirect, url_for, session, send_file, flash)
@@ -21,24 +22,46 @@ import database as db
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'sharcode-dev-key-changez-moi-en-prod')
 
-# Initialise la base de données au démarrage
 db.init_db()
+
+
+# ── CSRF ──────────────────────────────────────────────────
+
+@app.before_request
+def _ensure_csrf_token():
+    if 'csrf_token' not in session:
+        session['csrf_token'] = secrets.token_hex(32)
+
+
+@app.context_processor
+def _inject_csrf():
+    return {'csrf_token': session.get('csrf_token', '')}
+
+
+def _csrf_valide():
+    token = request.form.get('csrf_token') or request.headers.get('X-CSRF-Token', '')
+    return token == session.get('csrf_token', '')
+
+
+def csrf_requis(f):
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        if request.method == 'POST' and not _csrf_valide():
+            flash("Session expirée. Veuillez recommencer.", "erreur")
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return wrapper
 
 
 # ── Helpers session ───────────────────────────────────────
 
 def utilisateur_connecte():
-    """Retourne l'utilisateur connecté ou None."""
     uid = session.get('user_id')
-    if uid:
-        return db.get_utilisateur(uid)
-    return None
+    return db.get_utilisateur(uid) if uid else None
 
 
 def login_requis(role=None):
-    """Décorateur maison pour protéger les routes."""
     def decorateur(f):
-        from functools import wraps
         @wraps(f)
         def wrapper(*args, **kwargs):
             u = utilisateur_connecte()
@@ -61,6 +84,9 @@ def login():
         return redirect(url_for('index'))
 
     if request.method == 'POST':
+        if not _csrf_valide():
+            flash("Session expirée. Veuillez recommencer.", "erreur")
+            return render_template('login.html')
         email = request.form.get('email', '').strip().lower()
         mdp   = request.form.get('mot_de_passe', '')
         u = db.verifier_login(email, mdp)
@@ -72,14 +98,6 @@ def login():
         flash("Email ou mot de passe incorrect.", "erreur")
 
     return render_template('login.html')
-
-
-@app.route('/register')
-def register():
-    # L'inscription publique est désactivée : les comptes professeurs sont créés
-    # par l'administrateur, et les comptes élèves par leur professeur.
-    flash("Les comptes sont créés par ton établissement. Demande tes identifiants à ton professeur ou à l'administration.", "info")
-    return redirect(url_for('login'))
 
 
 @app.route('/logout')
@@ -106,6 +124,8 @@ def index():
 def executer():
     if not utilisateur_connecte():
         return jsonify({'succes': False, 'erreur': 'Non connecté.'})
+    if not _csrf_valide():
+        return jsonify({'succes': False, 'erreur': 'Token invalide.'})
 
     data    = request.get_json()
     code    = data.get('code', '').strip()
@@ -149,9 +169,11 @@ def executer():
 @app.route('/etudiant/sauvegarder', methods=['POST'])
 @login_requis()
 def sauvegarder_programme():
+    if not _csrf_valide():
+        return jsonify({'succes': False, 'erreur': 'Token invalide.'})
     u    = utilisateur_connecte()
     data = request.get_json()
-    nom  = data.get('nom', 'mon_programme').strip() or 'mon_programme'
+    nom  = (data.get('nom') or 'mon_programme').strip() or 'mon_programme'
     code = data.get('code', '').strip()
     if not code:
         return jsonify({'succes': False, 'erreur': 'Code vide.'})
@@ -159,9 +181,31 @@ def sauvegarder_programme():
     return jsonify({'succes': True, 'id': prog_id})
 
 
+@app.route('/etudiant/importer', methods=['POST'])
+@login_requis()
+def importer_fichiers():
+    """Importe un ou plusieurs fichiers .shc envoyés en multipart."""
+    if not _csrf_valide():
+        return jsonify({'succes': False, 'erreur': 'Token invalide.'})
+    u = utilisateur_connecte()
+    fichiers = request.files.getlist('fichiers')
+    if not fichiers:
+        return jsonify({'succes': False, 'erreur': 'Aucun fichier reçu.'})
+    sauvegardes = []
+    for f in fichiers:
+        nom  = os.path.splitext(f.filename)[0] if f.filename else 'import'
+        code = f.read().decode('utf-8', errors='replace').strip()
+        if code:
+            pid = db.sauvegarder_programme(u['id'], nom, code)
+            sauvegardes.append({'id': pid, 'nom': nom})
+    return jsonify({'succes': True, 'sauvegardes': sauvegardes})
+
+
 @app.route('/etudiant/programme/<int:prog_id>/modifier', methods=['POST'])
 @login_requis()
 def modifier_mon_programme(prog_id):
+    if not _csrf_valide():
+        return jsonify({'succes': False, 'erreur': 'Token invalide.'})
     u    = utilisateur_connecte()
     data = request.get_json()
     nom  = (data.get('nom') or 'mon_programme').strip() or 'mon_programme'
@@ -175,14 +219,31 @@ def modifier_mon_programme(prog_id):
 @app.route('/etudiant/programmes')
 @login_requis()
 def mes_programmes():
+    u = utilisateur_connecte()
+    return jsonify({'programmes': db.get_programmes_etudiant(u['id'])})
+
+
+@app.route('/etudiant/programmes/telecharger')
+@login_requis()
+def telecharger_mes_programmes():
+    """ZIP de tous les fichiers de l'étudiant connecté."""
     u    = utilisateur_connecte()
     prog = db.get_programmes_etudiant(u['id'])
-    return jsonify({'programmes': prog})
+    buf  = io.BytesIO()
+    with zipfile.ZipFile(buf, 'w') as zf:
+        for p in prog:
+            zf.writestr(f"{p['nom']}.shc".replace(' ', '_'), p['code'])
+    buf.seek(0)
+    nom_zip = f"mes_programmes_{u['prenom']}_{u['nom']}.zip".replace(' ', '_')
+    return send_file(buf, as_attachment=True, download_name=nom_zip,
+                     mimetype='application/zip')
 
 
 @app.route('/etudiant/programme/<int:prog_id>/supprimer', methods=['POST'])
 @login_requis()
 def supprimer_programme(prog_id):
+    if not _csrf_valide():
+        return jsonify({'succes': False, 'erreur': 'Token invalide.'})
     u = utilisateur_connecte()
     db.supprimer_programme(prog_id, u['id'])
     return jsonify({'succes': True})
@@ -191,6 +252,8 @@ def supprimer_programme(prog_id):
 @app.route('/etudiant/lecon', methods=['POST'])
 @login_requis()
 def marquer_lecon():
+    if not _csrf_valide():
+        return jsonify({'succes': False, 'erreur': 'Token invalide.'})
     u    = utilisateur_connecte()
     data = request.get_json()
     db.marquer_lecon(u['id'], data.get('lecon_id'), data.get('lecon_titre', ''))
@@ -200,10 +263,14 @@ def marquer_lecon():
 @app.route('/etudiant/exercices')
 @login_requis()
 def exercices_etudiant():
-    u    = utilisateur_connecte()
-    exos = db.get_tous_exercices()
-    soum = db.get_soumissions_etudiant(u['id'])
-    soum_ids = {s['exercice_id'] for s in soum}
+    u = utilisateur_connecte()
+    # Filtrage par école : l'élève ne voit que les exercices de ses profs
+    if u.get('licence_id'):
+        exos = db.get_exercices_etudiant(u['licence_id'])
+    else:
+        exos = []
+    soum        = db.get_soumissions_etudiant(u['id'])
+    soum_ids    = {s['exercice_id'] for s in soum}
     soum_par_exo = {s['exercice_id']: s for s in soum}
     return render_template('dashboard_etudiant.html', user=u,
                            exercices=exos, soumissions_ids=soum_ids,
@@ -213,14 +280,21 @@ def exercices_etudiant():
 @app.route('/etudiant/soumettre', methods=['POST'])
 @login_requis()
 def soumettre():
+    if not _csrf_valide():
+        return jsonify({'succes': False, 'erreur': 'Token invalide.'})
     u    = utilisateur_connecte()
     data = request.get_json()
-    db.soumettre_exercice(
-        data.get('exercice_id'),
-        u['id'],
-        data.get('code', ''),
-        data.get('commentaire', '')
-    )
+    exo_id = data.get('exercice_id')
+
+    # Vérifie que l'exercice appartient à l'école de l'élève
+    exo = db.get_exercice(exo_id)
+    if not exo:
+        return jsonify({'succes': False, 'erreur': 'Exercice introuvable.'})
+    prof = db.get_utilisateur(exo['prof_id'])
+    if u.get('licence_id') and prof and prof.get('licence_id') != u['licence_id']:
+        return jsonify({'succes': False, 'erreur': 'Exercice non autorisé.'})
+
+    db.soumettre_exercice(exo_id, u['id'], data.get('code', ''), data.get('commentaire', ''))
     return jsonify({'succes': True})
 
 
@@ -235,12 +309,15 @@ def dashboard_prof():
     eleves = db.get_etudiants_licence(u['licence_id']) if u.get('licence_id') else []
     lic    = db.get_licence(u['licence_id']) if u.get('licence_id') else None
     ecole  = lic['label'] if lic else None
+    licences = db.get_toutes_licences()
     return render_template('dashboard_prof.html', user=u, stats=stats,
-                           exercices=exos, eleves=eleves, ecole=ecole)
+                           exercices=exos, eleves=eleves, ecole=ecole,
+                           licences=licences)
 
 
 @app.route('/prof/eleve/creer', methods=['POST'])
 @login_requis(role='prof')
+@csrf_requis
 def creer_eleve():
     u = utilisateur_connecte()
     if not u.get('licence_id'):
@@ -262,8 +339,40 @@ def creer_eleve():
     return redirect(url_for('dashboard_prof'))
 
 
+@app.route('/prof/eleve/<int:eleve_id>/modifier', methods=['POST'])
+@login_requis(role='prof')
+@csrf_requis
+def modifier_eleve(eleve_id):
+    u      = utilisateur_connecte()
+    nom    = request.form.get('nom', '').strip()
+    prenom = request.form.get('prenom', '').strip()
+    email  = request.form.get('email', '').strip().lower()
+    classe = request.form.get('classe', '').strip()
+    if not all([nom, prenom, email]):
+        flash("Nom, prénom et email sont obligatoires.", "erreur")
+    else:
+        ok, err = db.modifier_eleve(eleve_id, u['licence_id'], nom, prenom, email, classe)
+        flash("Élève mis à jour." if ok else err, "succes" if ok else "erreur")
+    return redirect(url_for('dashboard_prof'))
+
+
+@app.route('/prof/eleve/<int:eleve_id>/changer-mdp', methods=['POST'])
+@login_requis(role='prof')
+@csrf_requis
+def changer_mdp_eleve(eleve_id):
+    u   = utilisateur_connecte()
+    mdp = request.form.get('nouveau_mdp', '')
+    if len(mdp) < 6:
+        flash("Le mot de passe doit faire au moins 6 caractères.", "erreur")
+    else:
+        ok, err = db.changer_mdp_eleve(eleve_id, u['licence_id'], mdp)
+        flash("Mot de passe mis à jour." if ok else err, "succes" if ok else "erreur")
+    return redirect(url_for('dashboard_prof'))
+
+
 @app.route('/prof/eleve/<int:eleve_id>/supprimer', methods=['POST'])
 @login_requis(role='prof')
+@csrf_requis
 def supprimer_eleve(eleve_id):
     u = utilisateur_connecte()
     if u.get('licence_id'):
@@ -274,13 +383,13 @@ def supprimer_eleve(eleve_id):
 
 @app.route('/prof/exercice/creer', methods=['POST'])
 @login_requis(role='prof')
+@csrf_requis
 def creer_exercice():
-    u    = utilisateur_connecte()
-    data = request.form
-    titre       = data.get('titre', '').strip()
-    description = data.get('description', '').strip()
-    code_ex     = data.get('code_exemple', '').strip()
-    date_limite = data.get('date_limite', '').strip() or None
+    u           = utilisateur_connecte()
+    titre       = request.form.get('titre', '').strip()
+    description = request.form.get('description', '').strip()
+    code_ex     = request.form.get('code_exemple', '').strip()
+    date_limite = request.form.get('date_limite', '').strip() or None
     if titre and description:
         db.creer_exercice(u['id'], titre, description, code_ex, date_limite)
         flash("Exercice créé.", "succes")
@@ -291,6 +400,7 @@ def creer_exercice():
 
 @app.route('/prof/exercice/<int:exo_id>/supprimer', methods=['POST'])
 @login_requis(role='prof')
+@csrf_requis
 def supprimer_exercice(exo_id):
     u = utilisateur_connecte()
     db.supprimer_exercice(exo_id, u['id'])
@@ -301,8 +411,12 @@ def supprimer_exercice(exo_id):
 @app.route('/prof/exercice/<int:exo_id>/soumissions')
 @login_requis(role='prof')
 def voir_soumissions(exo_id):
-    u    = utilisateur_connecte()
-    exo  = db.get_exercice(exo_id)
+    u   = utilisateur_connecte()
+    exo = db.get_exercice(exo_id)
+    # Vérifie que le prof est bien l'auteur de l'exercice
+    if not exo or exo['prof_id'] != u['id']:
+        flash("Exercice introuvable.", "erreur")
+        return redirect(url_for('dashboard_prof'))
     soum = db.get_soumissions_exercice(exo_id)
     return render_template('soumissions.html', user=u, exercice=exo, soumissions=soum)
 
@@ -310,10 +424,10 @@ def voir_soumissions(exo_id):
 @app.route('/prof/soumission/<int:soum_id>/telecharger')
 @login_requis(role='prof')
 def telecharger_code(soum_id):
-    """Télécharge le code d'une soumission en fichier .shc"""
+    u    = utilisateur_connecte()
     conn = db.get_db()
-    row = conn.execute("""
-        SELECT s.code, s.date_soumission, u.nom, u.prenom, e.titre
+    row  = conn.execute("""
+        SELECT s.code, s.date_soumission, u.nom, u.prenom, e.titre, e.prof_id
         FROM soumissions s
         JOIN utilisateurs u ON s.etudiant_id = u.id
         JOIN exercices e ON s.exercice_id = e.id
@@ -321,25 +435,25 @@ def telecharger_code(soum_id):
     """, (soum_id,)).fetchone()
     conn.close()
 
-    if not row:
+    if not row or row['prof_id'] != u['id']:
         flash("Soumission introuvable.", "erreur")
         return redirect(url_for('dashboard_prof'))
 
     nom_fichier = f"{row['prenom']}_{row['nom']}_{row['titre']}.shc".replace(' ', '_')
     buf = io.BytesIO(row['code'].encode('utf-8'))
     buf.seek(0)
-    return send_file(buf, as_attachment=True,
-                     download_name=nom_fichier,
+    return send_file(buf, as_attachment=True, download_name=nom_fichier,
                      mimetype='text/plain')
 
 
 @app.route('/prof/etudiant/<int:etudiant_id>/programmes')
 @login_requis(role='prof')
 def voir_programmes_etudiant(etudiant_id):
-    """Télécharge tous les programmes d'un étudiant en archive ZIP."""
-    import zipfile
+    u        = utilisateur_connecte()
     etudiant = db.get_utilisateur(etudiant_id)
-    if not etudiant or etudiant['role'] != 'etudiant':
+    # Vérifie que l'élève appartient à l'école du prof
+    if (not etudiant or etudiant['role'] != 'etudiant'
+            or etudiant.get('licence_id') != u.get('licence_id')):
         flash("Étudiant introuvable.", "erreur")
         return redirect(url_for('dashboard_prof'))
 
@@ -347,13 +461,10 @@ def voir_programmes_etudiant(etudiant_id):
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, 'w') as zf:
         for p in programmes:
-            nom = f"{p['nom']}.shc".replace(' ', '_')
-            zf.writestr(nom, p['code'])
+            zf.writestr(f"{p['nom']}.shc".replace(' ', '_'), p['code'])
     buf.seek(0)
-
     nom_zip = f"programmes_{etudiant['prenom']}_{etudiant['nom']}.zip".replace(' ', '_')
-    return send_file(buf, as_attachment=True,
-                     download_name=nom_zip,
+    return send_file(buf, as_attachment=True, download_name=nom_zip,
                      mimetype='application/zip')
 
 
@@ -377,10 +488,11 @@ def admin_licences():
 
 @app.route('/admin/licence/creer', methods=['POST'])
 @login_requis(role='admin')
+@csrf_requis
 def admin_creer_licence():
-    label      = request.form.get('label', '').strip()
-    max_profs  = int(request.form.get('max_profs', 5))
-    date_exp   = request.form.get('date_expiration', '').strip() or None
+    label     = request.form.get('label', '').strip()
+    max_profs = int(request.form.get('max_profs', 5))
+    date_exp  = request.form.get('date_expiration', '').strip() or None
     if not label:
         flash("Le libellé est obligatoire.", "erreur")
     else:
@@ -389,8 +501,24 @@ def admin_creer_licence():
     return redirect(url_for('admin_licences'))
 
 
+@app.route('/admin/licence/<int:lic_id>/modifier', methods=['POST'])
+@login_requis(role='admin')
+@csrf_requis
+def admin_modifier_licence(lic_id):
+    label     = request.form.get('label', '').strip()
+    max_profs = int(request.form.get('max_profs', 5))
+    date_exp  = request.form.get('date_expiration', '').strip() or None
+    if not label:
+        flash("Le libellé est obligatoire.", "erreur")
+    else:
+        db.modifier_licence_admin(lic_id, label, max_profs, date_exp)
+        flash("Licence mise à jour.", "succes")
+    return redirect(url_for('admin_licences'))
+
+
 @app.route('/admin/licence/<int:lic_id>/toggle', methods=['POST'])
 @login_requis(role='admin')
+@csrf_requis
 def admin_toggle_licence(lic_id):
     db.toggle_licence(lic_id)
     flash("Statut de la licence modifié.", "succes")
@@ -399,6 +527,7 @@ def admin_toggle_licence(lic_id):
 
 @app.route('/admin/licence/<int:lic_id>/supprimer', methods=['POST'])
 @login_requis(role='admin')
+@csrf_requis
 def admin_supprimer_licence(lic_id):
     db.supprimer_licence(lic_id)
     flash("Licence supprimée.", "succes")
@@ -417,8 +546,8 @@ def admin_utilisateurs():
 
 @app.route('/admin/utilisateur/creer', methods=['POST'])
 @login_requis(role='admin')
+@csrf_requis
 def admin_creer_utilisateur():
-    """L'admin crée un compte professeur rattaché à une licence (école)."""
     nom        = request.form.get('nom', '').strip()
     prenom     = request.form.get('prenom', '').strip()
     email      = request.form.get('email', '').strip().lower()
@@ -437,8 +566,42 @@ def admin_creer_utilisateur():
     return redirect(url_for('admin_utilisateurs'))
 
 
+@app.route('/admin/utilisateur/<int:user_id>/modifier', methods=['POST'])
+@login_requis(role='admin')
+@csrf_requis
+def admin_modifier_utilisateur(user_id):
+    u_admin    = utilisateur_connecte()
+    nom        = request.form.get('nom', '').strip()
+    prenom     = request.form.get('prenom', '').strip()
+    email      = request.form.get('email', '').strip().lower()
+    licence_id = request.form.get('licence_id', '').strip() or None
+    if not all([nom, prenom, email]):
+        flash("Nom, prénom et email sont obligatoires.", "erreur")
+    else:
+        ok, err = db.modifier_utilisateur_admin(
+            user_id, nom, prenom, email,
+            int(licence_id) if licence_id else None
+        )
+        flash("Utilisateur mis à jour." if ok else err, "succes" if ok else "erreur")
+    return redirect(url_for('admin_utilisateurs'))
+
+
+@app.route('/admin/utilisateur/<int:user_id>/changer-mdp', methods=['POST'])
+@login_requis(role='admin')
+@csrf_requis
+def admin_changer_mdp(user_id):
+    mdp = request.form.get('nouveau_mdp', '')
+    if len(mdp) < 6:
+        flash("Le mot de passe doit faire au moins 6 caractères.", "erreur")
+    else:
+        db.changer_mdp_utilisateur(user_id, mdp)
+        flash("Mot de passe mis à jour.", "succes")
+    return redirect(url_for('admin_utilisateurs'))
+
+
 @app.route('/admin/utilisateur/<int:user_id>/toggle', methods=['POST'])
 @login_requis(role='admin')
+@csrf_requis
 def admin_toggle_utilisateur(user_id):
     db.toggle_utilisateur(user_id)
     flash("Statut de l'utilisateur modifié.", "succes")
@@ -447,6 +610,7 @@ def admin_toggle_utilisateur(user_id):
 
 @app.route('/admin/utilisateur/<int:user_id>/supprimer', methods=['POST'])
 @login_requis(role='admin')
+@csrf_requis
 def admin_supprimer_utilisateur(user_id):
     u = utilisateur_connecte()
     if user_id == u['id']:
@@ -460,6 +624,6 @@ def admin_supprimer_utilisateur(user_id):
 if __name__ == '__main__':
     port  = int(os.environ.get('FLASK_PORT', 5000))
     debug = os.environ.get('FLASK_ENV', 'production') == 'development'
-    print('\n  [SharCode] Serveur lance !')
+    print('\n  [SharCode] Serveur lancé !')
     print(f'  Ouvre ton navigateur sur : http://localhost:{port}\n')
     app.run(debug=debug, host='0.0.0.0', port=port)

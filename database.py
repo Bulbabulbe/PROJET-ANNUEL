@@ -1,6 +1,5 @@
 """
 SharCode — Base de données SQLite
-Gère les utilisateurs, leçons, programmes, exercices, soumissions, licences.
 """
 
 import sqlite3
@@ -10,6 +9,8 @@ import secrets
 import string
 from datetime import datetime
 
+from werkzeug.security import generate_password_hash, check_password_hash
+
 DB_PATH = os.environ.get(
     'DATABASE_PATH',
     os.path.join(os.path.dirname(os.path.abspath(__file__)), 'sharcode.db')
@@ -17,14 +18,15 @@ DB_PATH = os.environ.get(
 
 
 def get_db():
-    """Retourne une connexion à la base de données."""
-    conn = sqlite3.connect(DB_PATH)
+    if DB_PATH.startswith('file:'):
+        conn = sqlite3.connect(DB_PATH, uri=True)
+    else:
+        conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
 
 def init_db():
-    """Crée les tables si elles n'existent pas et applique les migrations."""
     conn = get_db()
     c = conn.cursor()
 
@@ -40,15 +42,15 @@ def init_db():
         );
 
         CREATE TABLE IF NOT EXISTS utilisateurs (
-            id          INTEGER PRIMARY KEY AUTOINCREMENT,
-            nom         TEXT NOT NULL,
-            prenom      TEXT NOT NULL,
-            email       TEXT NOT NULL UNIQUE,
-            mot_de_passe TEXT NOT NULL,
-            role        TEXT NOT NULL DEFAULT 'etudiant',
-            classe      TEXT DEFAULT '',
-            actif       INTEGER DEFAULT 1,
-            licence_id  INTEGER,
+            id               INTEGER PRIMARY KEY AUTOINCREMENT,
+            nom              TEXT NOT NULL,
+            prenom           TEXT NOT NULL,
+            email            TEXT NOT NULL UNIQUE,
+            mot_de_passe     TEXT NOT NULL,
+            role             TEXT NOT NULL DEFAULT 'etudiant',
+            classe           TEXT DEFAULT '',
+            actif            INTEGER DEFAULT 1,
+            licence_id       INTEGER,
             date_inscription TEXT DEFAULT (datetime('now')),
             FOREIGN KEY (licence_id) REFERENCES licences(id)
         );
@@ -73,12 +75,12 @@ def init_db():
         );
 
         CREATE TABLE IF NOT EXISTS exercices (
-            id              INTEGER PRIMARY KEY AUTOINCREMENT,
-            prof_id         INTEGER NOT NULL,
-            titre           TEXT NOT NULL,
-            description     TEXT NOT NULL,
-            code_exemple    TEXT DEFAULT '',
-            date_creation   TEXT DEFAULT (datetime('now')),
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            prof_id      INTEGER NOT NULL,
+            titre        TEXT NOT NULL,
+            description  TEXT NOT NULL,
+            code_exemple TEXT DEFAULT '',
+            date_creation TEXT DEFAULT (datetime('now')),
             FOREIGN KEY (prof_id) REFERENCES utilisateurs(id)
         );
 
@@ -94,7 +96,6 @@ def init_db():
         );
     """)
 
-    # Migrations : ajout de colonnes sur table existante
     for migration in [
         "ALTER TABLE utilisateurs ADD COLUMN actif INTEGER DEFAULT 1",
         "ALTER TABLE utilisateurs ADD COLUMN licence_id INTEGER",
@@ -107,18 +108,14 @@ def init_db():
 
     conn.commit()
     conn.close()
-
     _init_admin()
 
 
 def _init_admin():
-    """Crée le compte admin par défaut s'il n'existe pas."""
     admin_email = os.environ.get('ADMIN_EMAIL', 'admin@sharcode.fr')
     admin_mdp   = os.environ.get('ADMIN_PASSWORD', 'Admin2024!')
     conn = get_db()
-    existing = conn.execute(
-        "SELECT id FROM utilisateurs WHERE role = 'admin'"
-    ).fetchone()
+    existing = conn.execute("SELECT id FROM utilisateurs WHERE role = 'admin'").fetchone()
     if not existing:
         conn.execute(
             "INSERT OR IGNORE INTO utilisateurs (nom, prenom, email, mot_de_passe, role) "
@@ -130,8 +127,14 @@ def _init_admin():
 
 
 def hasher_mdp(mdp):
-    """Hash SHA-256 du mot de passe."""
-    return hashlib.sha256(mdp.encode('utf-8')).hexdigest()
+    return generate_password_hash(mdp, method='pbkdf2:sha256')
+
+
+def _verifier_hash(mdp, stored_hash):
+    """PBKDF2 en priorité, SHA-256 legacy en fallback automatique."""
+    if stored_hash.startswith('pbkdf2:') or stored_hash.startswith('scrypt:'):
+        return check_password_hash(stored_hash, mdp)
+    return hashlib.sha256(mdp.encode('utf-8')).hexdigest() == stored_hash
 
 
 # ── Utilisateurs ──────────────────────────────────────────
@@ -155,11 +158,24 @@ def creer_utilisateur(nom, prenom, email, mdp, role='etudiant', classe='', licen
 def verifier_login(email, mdp):
     conn = get_db()
     row = conn.execute(
-        "SELECT * FROM utilisateurs WHERE email = ? AND mot_de_passe = ? AND actif = 1",
-        (email, hasher_mdp(mdp))
+        "SELECT * FROM utilisateurs WHERE email = ? AND actif = 1", (email,)
     ).fetchone()
+    if not row:
+        conn.close()
+        return None
+    u = dict(row)
+    if not _verifier_hash(mdp, u['mot_de_passe']):
+        conn.close()
+        return None
+    # Migration automatique SHA-256 → PBKDF2
+    if not (u['mot_de_passe'].startswith('pbkdf2:') or u['mot_de_passe'].startswith('scrypt:')):
+        conn.execute(
+            "UPDATE utilisateurs SET mot_de_passe = ? WHERE id = ?",
+            (hasher_mdp(mdp), u['id'])
+        )
+        conn.commit()
     conn.close()
-    return dict(row) if row else None
+    return u
 
 
 def get_utilisateur(user_id):
@@ -169,17 +185,7 @@ def get_utilisateur(user_id):
     return dict(row) if row else None
 
 
-def get_tous_etudiants():
-    conn = get_db()
-    rows = conn.execute(
-        "SELECT * FROM utilisateurs WHERE role = 'etudiant' ORDER BY nom, prenom"
-    ).fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
-
-
 def get_etudiants_licence(licence_id):
-    """Élèves rattachés à une école (licence) — vue côté professeur."""
     conn = get_db()
     rows = conn.execute("""
         SELECT u.*, lic.label as ecole
@@ -193,7 +199,7 @@ def get_etudiants_licence(licence_id):
 
 
 def supprimer_eleve(eleve_id, licence_id):
-    """Le prof supprime un élève de SON école uniquement (sécurité)."""
+    """Le prof supprime un élève uniquement de son école."""
     conn = get_db()
     row = conn.execute(
         "SELECT id FROM utilisateurs WHERE id = ? AND role = 'etudiant' AND licence_id = ?",
@@ -208,12 +214,83 @@ def supprimer_eleve(eleve_id, licence_id):
     conn.close()
 
 
+def modifier_eleve(eleve_id, licence_id, nom, prenom, email, classe=''):
+    """Modifie les infos d'un élève — vérifie l'appartenance à l'école du prof."""
+    conn = get_db()
+    row = conn.execute(
+        "SELECT id FROM utilisateurs WHERE id = ? AND role = 'etudiant' AND licence_id = ?",
+        (eleve_id, licence_id)
+    ).fetchone()
+    if not row:
+        conn.close()
+        return False, "Élève introuvable dans ton école."
+    try:
+        conn.execute(
+            "UPDATE utilisateurs SET nom=?, prenom=?, email=?, classe=? WHERE id=?",
+            (nom, prenom, email, classe, eleve_id)
+        )
+        conn.commit()
+        return True, None
+    except sqlite3.IntegrityError:
+        return False, "Cette adresse email est déjà utilisée."
+    finally:
+        conn.close()
+
+
+def changer_mdp_eleve(eleve_id, licence_id, nouveau_mdp):
+    """Permet au prof de réinitialiser le mot de passe d'un élève de son école."""
+    conn = get_db()
+    row = conn.execute(
+        "SELECT id FROM utilisateurs WHERE id = ? AND role = 'etudiant' AND licence_id = ?",
+        (eleve_id, licence_id)
+    ).fetchone()
+    if not row:
+        conn.close()
+        return False, "Élève introuvable dans ton école."
+    conn.execute(
+        "UPDATE utilisateurs SET mot_de_passe=? WHERE id=?",
+        (hasher_mdp(nouveau_mdp), eleve_id)
+    )
+    conn.commit()
+    conn.close()
+    return True, None
+
+
+def modifier_utilisateur_admin(user_id, nom, prenom, email, licence_id=None):
+    """L'admin modifie les champs d'un utilisateur."""
+    conn = get_db()
+    try:
+        conn.execute(
+            "UPDATE utilisateurs SET nom=?, prenom=?, email=?, licence_id=? WHERE id=?",
+            (nom, prenom, email, licence_id or None, user_id)
+        )
+        conn.commit()
+        return True, None
+    except sqlite3.IntegrityError:
+        return False, "Cette adresse email est déjà utilisée."
+    finally:
+        conn.close()
+
+
+def changer_mdp_utilisateur(user_id, nouveau_mdp):
+    """L'admin réinitialise le mot de passe d'un utilisateur quelconque."""
+    conn = get_db()
+    conn.execute(
+        "UPDATE utilisateurs SET mot_de_passe=? WHERE id=?",
+        (hasher_mdp(nouveau_mdp), user_id)
+    )
+    conn.commit()
+    conn.close()
+    return True, None
+
+
 # ── Leçons ────────────────────────────────────────────────
 
 def marquer_lecon(user_id, lecon_id, lecon_titre):
     conn = get_db()
     conn.execute(
-        "INSERT OR IGNORE INTO lecons_completees (utilisateur_id, lecon_id, lecon_titre) VALUES (?, ?, ?)",
+        "INSERT OR IGNORE INTO lecons_completees (utilisateur_id, lecon_id, lecon_titre) "
+        "VALUES (?, ?, ?)",
         (user_id, lecon_id, lecon_titre)
     )
     conn.commit()
@@ -231,8 +308,6 @@ def get_lecons_etudiant(user_id):
 
 
 def get_stats_lecons(licence_id=None):
-    """Retourne pour chaque étudiant son nombre de leçons complétées.
-    Si licence_id est fourni, ne renvoie que les élèves de cette école."""
     conn = get_db()
     params = []
     filtre = ""
@@ -269,11 +344,10 @@ def sauvegarder_programme(user_id, nom, code):
 
 
 def modifier_programme(prog_id, user_id, nom, code):
-    """Met à jour un programme existant — uniquement s'il appartient à l'élève."""
     conn = get_db()
     conn.execute(
-        "UPDATE programmes SET nom = ?, code = ?, date_sauvegarde = datetime('now') "
-        "WHERE id = ? AND utilisateur_id = ?",
+        "UPDATE programmes SET nom=?, code=?, date_sauvegarde=datetime('now') "
+        "WHERE id=? AND utilisateur_id=?",
         (nom, code, prog_id, user_id)
     )
     conn.commit()
@@ -299,7 +373,9 @@ def get_programme(prog_id):
 
 def supprimer_programme(prog_id, user_id):
     conn = get_db()
-    conn.execute("DELETE FROM programmes WHERE id = ? AND utilisateur_id = ?", (prog_id, user_id))
+    conn.execute(
+        "DELETE FROM programmes WHERE id = ? AND utilisateur_id = ?", (prog_id, user_id)
+    )
     conn.commit()
     conn.close()
 
@@ -317,6 +393,20 @@ def creer_exercice(prof_id, titre, description, code_exemple='', date_limite=Non
     conn.commit()
     conn.close()
     return exo_id
+
+
+def get_exercices_etudiant(licence_id):
+    """Retourne uniquement les exercices des profs de la même école que l'élève."""
+    conn = get_db()
+    rows = conn.execute("""
+        SELECT e.*, u.nom as prof_nom, u.prenom as prof_prenom
+        FROM exercices e
+        JOIN utilisateurs u ON e.prof_id = u.id
+        WHERE u.licence_id = ?
+        ORDER BY e.date_creation DESC
+    """, (licence_id,)).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
 
 
 def get_tous_exercices():
@@ -358,8 +448,7 @@ def supprimer_exercice(exo_id, prof_id):
 # ── Soumissions ───────────────────────────────────────────
 
 def soumettre_exercice(exercice_id, etudiant_id, code, commentaire=''):
-    """Enregistre la soumission. Si l'élève a déjà rendu, met à jour sa réponse
-    (il peut corriger une erreur) et réinitialise la date de soumission."""
+    """Crée ou met à jour la soumission d'un élève pour un exercice."""
     conn = get_db()
     existante = conn.execute(
         "SELECT id FROM soumissions WHERE exercice_id = ? AND etudiant_id = ?",
@@ -367,8 +456,8 @@ def soumettre_exercice(exercice_id, etudiant_id, code, commentaire=''):
     ).fetchone()
     if existante:
         conn.execute(
-            "UPDATE soumissions SET code = ?, commentaire = ?, "
-            "date_soumission = datetime('now') WHERE id = ?",
+            "UPDATE soumissions SET code=?, commentaire=?, date_soumission=datetime('now') "
+            "WHERE id=?",
             (code, commentaire, existante['id'])
         )
     else:
@@ -382,8 +471,6 @@ def soumettre_exercice(exercice_id, etudiant_id, code, commentaire=''):
 
 
 def _est_en_retard(date_soumission, date_limite):
-    """Vrai si la soumission a été faite après la date limite.
-    Le jour de la date limite compte comme « à temps »."""
     if not date_limite or not date_soumission:
         return False
     return date_soumission[:10] > date_limite[:10]
@@ -440,7 +527,6 @@ def _generer_code_licence():
 def creer_licence(label, max_profs=5, date_expiration=None):
     conn = get_db()
     code = _generer_code_licence()
-    # Garantir l'unicité du code
     while conn.execute("SELECT id FROM licences WHERE code = ?", (code,)).fetchone():
         code = _generer_code_licence()
     conn.execute(
@@ -452,11 +538,20 @@ def creer_licence(label, max_profs=5, date_expiration=None):
     return code
 
 
+def modifier_licence_admin(lic_id, label, max_profs, date_expiration=None):
+    conn = get_db()
+    conn.execute(
+        "UPDATE licences SET label=?, max_profs=?, date_expiration=? WHERE id=?",
+        (label, max_profs, date_expiration or None, lic_id)
+    )
+    conn.commit()
+    conn.close()
+
+
 def get_toutes_licences():
     conn = get_db()
     rows = conn.execute("""
-        SELECT l.*,
-               COUNT(u.id) as nb_profs_actifs
+        SELECT l.*, COUNT(u.id) as nb_profs_actifs
         FROM licences l
         LEFT JOIN utilisateurs u ON u.licence_id = l.id AND u.role = 'prof' AND u.actif = 1
         GROUP BY l.id
@@ -475,7 +570,9 @@ def get_licence(licence_id):
 
 def get_licence_par_code(code):
     conn = get_db()
-    row = conn.execute("SELECT * FROM licences WHERE code = ?", (code.strip().upper(),)).fetchone()
+    row = conn.execute(
+        "SELECT * FROM licences WHERE code = ?", (code.strip().upper(),)
+    ).fetchone()
     conn.close()
     return dict(row) if row else None
 
@@ -483,7 +580,7 @@ def get_licence_par_code(code):
 def toggle_licence(licence_id):
     conn = get_db()
     conn.execute(
-        "UPDATE licences SET active = CASE WHEN active = 1 THEN 0 ELSE 1 END WHERE id = ?",
+        "UPDATE licences SET active = CASE WHEN active=1 THEN 0 ELSE 1 END WHERE id=?",
         (licence_id,)
     )
     conn.commit()
@@ -492,18 +589,13 @@ def toggle_licence(licence_id):
 
 def supprimer_licence(licence_id):
     conn = get_db()
-    # Détacher les profs liés avant suppression
-    conn.execute("UPDATE utilisateurs SET licence_id = NULL WHERE licence_id = ?", (licence_id,))
-    conn.execute("DELETE FROM licences WHERE id = ?", (licence_id,))
+    conn.execute("UPDATE utilisateurs SET licence_id=NULL WHERE licence_id=?", (licence_id,))
+    conn.execute("DELETE FROM licences WHERE id=?", (licence_id,))
     conn.commit()
     conn.close()
 
 
 def valider_licence_prof(code):
-    """
-    Retourne (ok, message, licence_id).
-    Vérifie que la licence existe, est active, non expirée et a de la place.
-    """
     lic = get_licence_par_code(code)
     if not lic:
         return False, "Code de licence invalide.", None
@@ -514,7 +606,7 @@ def valider_licence_prof(code):
             return False, "Cette licence a expiré.", None
     conn = get_db()
     nb = conn.execute(
-        "SELECT COUNT(*) FROM utilisateurs WHERE licence_id = ? AND role = 'prof' AND actif = 1",
+        "SELECT COUNT(*) FROM utilisateurs WHERE licence_id=? AND role='prof' AND actif=1",
         (lic['id'],)
     ).fetchone()[0]
     conn.close()
@@ -540,7 +632,7 @@ def get_tous_utilisateurs():
 def toggle_utilisateur(user_id):
     conn = get_db()
     conn.execute(
-        "UPDATE utilisateurs SET actif = CASE WHEN actif = 1 THEN 0 ELSE 1 END WHERE id = ?",
+        "UPDATE utilisateurs SET actif = CASE WHEN actif=1 THEN 0 ELSE 1 END WHERE id=?",
         (user_id,)
     )
     conn.commit()
@@ -549,29 +641,30 @@ def toggle_utilisateur(user_id):
 
 def supprimer_utilisateur_admin(user_id):
     conn = get_db()
-    conn.execute("DELETE FROM lecons_completees WHERE utilisateur_id = ?", (user_id,))
-    conn.execute("DELETE FROM programmes WHERE utilisateur_id = ?", (user_id,))
-    conn.execute("DELETE FROM soumissions WHERE etudiant_id = ?", (user_id,))
-    conn.execute("DELETE FROM exercices WHERE prof_id = ?", (user_id,))
-    conn.execute("DELETE FROM utilisateurs WHERE id = ?", (user_id,))
+    conn.execute("DELETE FROM lecons_completees WHERE utilisateur_id=?", (user_id,))
+    conn.execute("DELETE FROM programmes WHERE utilisateur_id=?", (user_id,))
+    conn.execute("DELETE FROM soumissions WHERE etudiant_id=?", (user_id,))
+    conn.execute("DELETE FROM exercices WHERE prof_id=?", (user_id,))
+    conn.execute("DELETE FROM utilisateurs WHERE id=?", (user_id,))
     conn.commit()
     conn.close()
 
 
 def get_stats_admin():
     conn = get_db()
-    stats = {}
-    stats['nb_etudiants']  = conn.execute(
-        "SELECT COUNT(*) FROM utilisateurs WHERE role = 'etudiant' AND actif = 1"
-    ).fetchone()[0]
-    stats['nb_profs']      = conn.execute(
-        "SELECT COUNT(*) FROM utilisateurs WHERE role = 'prof' AND actif = 1"
-    ).fetchone()[0]
-    stats['nb_licences']   = conn.execute(
-        "SELECT COUNT(*) FROM licences WHERE active = 1"
-    ).fetchone()[0]
-    stats['nb_exercices']  = conn.execute("SELECT COUNT(*) FROM exercices").fetchone()[0]
-    stats['nb_soumissions']= conn.execute("SELECT COUNT(*) FROM soumissions").fetchone()[0]
-    stats['nb_programmes'] = conn.execute("SELECT COUNT(*) FROM programmes").fetchone()[0]
+    stats = {
+        'nb_etudiants':   conn.execute(
+            "SELECT COUNT(*) FROM utilisateurs WHERE role='etudiant' AND actif=1"
+        ).fetchone()[0],
+        'nb_profs':       conn.execute(
+            "SELECT COUNT(*) FROM utilisateurs WHERE role='prof' AND actif=1"
+        ).fetchone()[0],
+        'nb_licences':    conn.execute(
+            "SELECT COUNT(*) FROM licences WHERE active=1"
+        ).fetchone()[0],
+        'nb_exercices':   conn.execute("SELECT COUNT(*) FROM exercices").fetchone()[0],
+        'nb_soumissions': conn.execute("SELECT COUNT(*) FROM soumissions").fetchone()[0],
+        'nb_programmes':  conn.execute("SELECT COUNT(*) FROM programmes").fetchone()[0],
+    }
     conn.close()
     return stats
